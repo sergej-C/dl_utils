@@ -88,6 +88,18 @@ class preprocessing():
     def open_image(path):
         return PIL.Image.open(path)
 
+    @staticmethod
+    def rotate_img_by_angle(pil_img, angle):
+        """
+        rotate pil loaded image, for each angles
+        :param pil_img: image loaded with PIL.open
+        :param angle: one angle
+        :return:
+         rotated: rotated image (PIL images)
+        """
+
+        return  pil_img.rotate(angle, expand=True)
+
 
     @staticmethod
     def rotate_img_by_angles(pil_img, angles):
@@ -102,10 +114,23 @@ class preprocessing():
         rotated = []
         new_sizes = []
         for i, a in enumerate(angles):
-            rotated_im = pil_img.rotate(a, expand=True)
+            rotated_im = preprocessing.rotate_img_by_angle(pil_img, a)
             rotated.append(rotated_im)
             new_sizes.append(np.array((rotated_im.size)))
-        return rotated, new_sizes
+        return rotated
+
+    @staticmethod
+    def rescale_img_by_ratio(pil_img, ratio):
+        """
+
+        :param pil_img:
+        :param ratio:
+        :return:
+        """
+
+        w, h = pil_img.size
+        return pil_img.resize(size=(int(np.ceil(w * ratio)), int(np.ceil(h * ratio))))
+
 
     @staticmethod
     def rescale_img_by_ratios(pil_img, ratios):
@@ -119,10 +144,10 @@ class preprocessing():
         new_sizes = []
         w,h=pil_img.size
         for i, r in enumerate(ratios):
-            rescaled_im = pil_img.resize(size=(int(np.ceil(w*r)), int(np.ceil(h*r))))
+            rescaled_im = preprocessing.rescale_img_by_ratio(pil_img, r)
             rescaled.append(rescaled_im)
             new_sizes.append(np.array((rescaled_im.size)))
-        return rescaled, new_sizes
+        return rescaled
 
     @staticmethod
     def apply_rgb_mask(img, rgb_mask, alpha=0.6, plot=False):
@@ -208,7 +233,7 @@ class preprocessing():
             filtered.append(preprocessing.apply_filter(pil_img, k))
             applied_filters.append(k)
 
-        return filtered, applied_filters
+        return filtered
 
 
     @staticmethod
@@ -325,12 +350,17 @@ class preprocessing():
 
         return relight
 
+    @staticmethod
+    def write_pil_im(pil_im, path_name_with_ext, type="JPEG"):
+        pil_im.save(path_name_with_ext, type)
+
 
 if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
     import fish_utils as fu
 
+    ALL_TRUE=True
     TEST_MERGE=False
     TEST_ROTATION=False
     TEST_RESCALED=False
@@ -347,7 +377,7 @@ if __name__ == '__main__':
     pil_backg = preprocessing.open_image(ex_background)
     pil_foreg = preprocessing.open_image(ex_bbox)
 
-    if TEST_MERGE:
+    if TEST_MERGE or ALL_TRUE:
         points = [(200, 120), (523, 231), (0,0), (125,780)]
         merged, bboxes = preprocessing.merge_img_in_background(pil_backg, pil_foreg, points)
         print "merged images {}".format(len(merged))
@@ -360,46 +390,45 @@ if __name__ == '__main__':
             array_axes[i].scatter(bboxes[i][2], bboxes[i][3], c='g')  # max
         plt.show()
 
-    if TEST_ROTATION:
+    if TEST_ROTATION or ALL_TRUE:
         angles = [30, 45, 50]
-        rotated, sizes = preprocessing.rotate_img_by_angles(pil_foreg, angles)
+        rotated = preprocessing.rotate_img_by_angles(pil_foreg, angles)
         print "rotated images {}".format(len(rotated))
         for i, im in enumerate(rotated):
-            print "new size {}".format(sizes[i])
+            print "new size {}".format(im.size)
             im.show()
 
-    if TEST_RESCALED:
+    if TEST_RESCALED or ALL_TRUE:
         ratios = [.7, .25, 2]
-        rescaled, sizes = preprocessing.rescale_img_by_ratios(pil_foreg, ratios)
+        rescaled = preprocessing.rescale_img_by_ratios(pil_foreg, ratios)
         print "rescaled images {}".format(len(rescaled))
         for i, im in enumerate(rescaled):
-            print "new size {}".format(sizes[i])
+            print "new size {}".format(im.size)
             im.show()
 
-    if TEST_MASK:
+    if TEST_MASK or ALL_TRUE:
         img = preprocessing.pil_image_to_array(pil_backg)
         preprocessing.apply_green_mask(img, plot=True)
 
-    if TEST_FILTERS:
-        filtered, filters = preprocessing.apply_filters(pil_backg, ['blur','detail'])
+    if TEST_FILTERS or ALL_TRUE:
+        filtered = preprocessing.apply_filters(pil_backg, ['blur','detail'])
         print "filtered images {}".format(len(filtered))
         for i, im in enumerate(filtered):
-            print "filter {}".format(filters[i])
             im.show()
 
-    if TEST_LIGHT:
+    if TEST_LIGHT or ALL_TRUE:
         # factor < 1 lower illumination
         #
         factors = [.2, 1.8]
         new_ = preprocessing.change_light_img_by_factors(pil_backg, factors, show=True)
 
-    if TEST_CONTRAST:
+    if TEST_CONTRAST or ALL_TRUE:
         # factor < 1 lower illumination
         #
         factors = [.2, 1.8]
         new_ = preprocessing.change_contrast_img_by_factors(pil_backg, factors, show=True)
 
-    if TEST_COLOR:
+    if TEST_COLOR or ALL_TRUE:
         # factor < 1 lower illumination
         #
         factors = [.2, 1.8]

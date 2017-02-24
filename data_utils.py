@@ -13,7 +13,7 @@ def mkdir_ifnotexists(path):
     create a folder with the specified path if not exists
     """
     if not os.path.exists(path): 
-        os.mkdir(path)
+        mkdirs(path)
 
 def ls(path, only_files=False):
     if only_files==True:
@@ -37,7 +37,7 @@ def create_sample_dirs(competition_path):
     mkdirs('data/sample/results')
     mkdirs('test/unknown')
     
-    # back to cwd
+    # back to cwdK
     os.chdir(current_dir)
 
 def mkdirs(directory_name):
@@ -115,7 +115,27 @@ def create_categories_folders(data_path, categories, ext='jpg'):
     mvfiles('*.'+ext, 'unknown/')    
     os.chdir(current_dir)
 
+#from http://stackoverflow.com/questions/38987/how-to-merge-two-python-dictionaries-in-a-single-expression
+def merge_two_dicts(x, y):
+    """Given two dicts, merge them into a new dict as a shallow copy."""
+    z = x.copy()
+    z.update(y)
+    return z
+
+#from http://stackoverflow.com/questions/38987/how-to-merge-two-python-dictionaries-in-a-single-expression
+def merge_dicts(*dict_args):
+    """
+    Given any number of dicts, shallow copy and merge into a new dict,
+    precedence goes to key value pairs in latter dicts.
+    """
+    result = {}
+    for dictionary in dict_args:
+        result.update(dictionary)
+    return result
+
 import bcolz
 def save_array(fname, arr): c=bcolz.carray(arr, rootdir=fname, mode='w'); c.flush()
 def load_array(fname): return bcolz.open(fname)[:]
-    
+
+def array_to_ind(array):
+    return dict(zip(array, xrange(len(array))))      
