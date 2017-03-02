@@ -568,7 +568,7 @@ if __name__ == '__main__':
 
     func_to_back = {
         'pre_merge': [],
-        'post_merge':['color','contrast','light']
+        'post_merge':['color','green']
     }
     func_back_params = {
         'pre_merge' : {
@@ -589,6 +589,10 @@ if __name__ == '__main__':
             'light': {
                 'func': preprocessing.change_light,
                 'param': range_utils.choice_n_rnd_numbers_from_to_linspace(.8, 1.2, 20, 2, round=True)
+            },
+            'green': {
+                'func': preprocessing.apply_green_mask_pil_img,
+                'param': [np.NaN]
             }
         }
     }

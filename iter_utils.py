@@ -2,6 +2,7 @@ import itertools
 from pprint import pprint
 import copy
 import collections
+import numpy as np
 
 class CombinatorialTransformer():
     def __init__(self, func_to_call, func_data, subject, tracer=None):
@@ -120,7 +121,12 @@ class TransformationTracer():
         f = self.applied_funcs[-1]
         p = self.params[-1]
 
-        self.obj = f(self.obj, p)
+        #
+        # no params
+        if p == np.NaN:
+            self.obj = f(self.obj)
+        else:
+            self.obj = f(self.obj, p)
 
     def add_func_param_and_update(self, f, p):
         self.add_func_param(f, p)

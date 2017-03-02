@@ -4,6 +4,8 @@ import PIL.ImageOps
 from skimage import data, color, io, img_as_float
 import PIL.ImageFilter as ImageFilter
 from PIL import ImageEnhance
+import matplotlib.pyplot as plt
+from skimage import img_as_ubyte
 
 import cv2
 
@@ -218,6 +220,15 @@ class preprocessing():
     def apply_green_mask(img, plot=False):
         return preprocessing.apply_rgb_mask(img, [0, 1, 0], plot=plot)
 
+
+    @staticmethod
+    def apply_green_mask_pil_img(pil_img, plot=False):
+
+        img_arr = preprocessing.pil_image_to_array(pil_img)
+        img_arr_masked = preprocessing.apply_green_mask(img_arr, plot=plot)
+        print img_arr_masked.dtype
+        return PIL.Image.fromarray(img_as_ubyte(img_arr_masked), mode='RGB')
+
     @staticmethod
     def apply_filter(pil_img, filter_key):
         """
@@ -407,7 +418,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import fish_utils as fu
 
-    ALL_TRUE=True
+    ALL_TRUE=False
     TEST_MERGE=False
     TEST_ROTATION=False
     TEST_RESCALED=False
@@ -478,5 +489,7 @@ if __name__ == '__main__':
     if TEST_COLOR or ALL_TRUE:
         # factor < 1 lower illumination
         #
-        factors = [.2, 1.8]
-        new_ = preprocessing.change_color_img_by_factors(pil_backg, factors, show=True)
+        #factors = [.2, 1.8]
+        #new_ = preprocessing.change_color_img_by_factors(pil_backg, factors, show=True)
+        _new = preprocessing.apply_green_mask_pil_img(pil_backg, plot=False)
+        _new.show()
