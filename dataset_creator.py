@@ -30,6 +30,8 @@ class DatasetCreator():
                  list_transformation_to_call_back,
                  list_transformation_to_call_foreg,
                  output_folder_path,
+                 shuffle=True,
+                 blur_merge=True,
                  base_path_background_points_xml=None,
                  class_names=None,
                  db_conf=None
@@ -163,6 +165,14 @@ class DatasetCreator():
         self.final_names = []
         self.final_bboxes = []
 
+        #
+        # if True shuffle the list of final images
+        self.shuffle = shuffle
+
+        #
+        # if True use opencv poisson method for merging background and foreground images
+        self.blur_merge = blur_merge
+
     def choose_point(self, back_pil, fore_pil):
         """
         get points randomly or from xml annotation file associate with
@@ -198,7 +208,7 @@ class DatasetCreator():
         # get the list of foregrounds and backgrounds
         self.foreground_list = glob(self.base_path_foreground_glob)[:2]
 
-        self.background_list = glob(self.base_path_backgrounds_glob)[:1]
+        self.background_list = glob(self.base_path_backgrounds_glob)[:2]
 
         print len(self.foreground_list), len(self.background_list)
 
@@ -240,12 +250,14 @@ class DatasetCreator():
         #
         # list of background PIL images
         back_img_list = [preprocessing.open_image(imp) for imp in self.background_list]
+        all_bkgr_names = []
+        backgr_names = [imp.split('/')[-1] for imp in self.background_list]
 
         #
         # pre_merge transformation if exists
         if len_premerge_transformation>0:
 
-            for im in back_img_list:
+            for idx, im in enumerate(back_img_list):
 
                 back_transformer = CombinatorialTransformer(
                                     self.list_transformation_to_call_back['pre_merge'],
@@ -254,6 +266,8 @@ class DatasetCreator():
                                     )
                 back_transformer.apply_transformations()
                 transformed_list_back_premerge.append(back_transformer.all_items)
+                for it in back_transformer.all_items:
+                    all_bkgr_names.append(backgr_names[idx])
 
             #print "transformed_list_back_premerge pre_merge len {}".format(len(transformed_list_back_premerge))
 
@@ -271,6 +285,7 @@ class DatasetCreator():
             del back_img_list
         else:
             list_back_to_merge = back_img_list
+            all_bkgr_names = backgr_names
 
         #
         # from list of list to list
@@ -286,7 +301,7 @@ class DatasetCreator():
         all_boxes = []
         all_tracers = []
         all_names = []
-        for back in list_back_to_merge:
+        for idb, back in enumerate(list_back_to_merge):
             for idf, modified_foreg in enumerate(all_foreg_list):
 
                 #
@@ -305,14 +320,15 @@ class DatasetCreator():
 
                         back_tracer.obj,
                         modified_foreg.obj,
-                        [chosen_point]
+                        [chosen_point],
+                        self.blur_merge
                     )
                 )
 
                 all_merged.append(pil_merged[0])
                 all_boxes.append(bboxes[0])
                 all_tracers.append(TransformationTracer.merge(modified_foreg, back_tracer))
-                all_names.append(all_foreg_names[idf])
+                all_names.append({'foreg':all_foreg_names[idf], 'backgr':all_bkgr_names[idb]})
 
         #
         # len of post_merged transformations
@@ -394,18 +410,29 @@ class DatasetCreator():
         fu = fast_ut.faster_rcnn_utils()
 
         #
+        # shuffle the list
+        if self.shuffle:
+            indexes = np.arange(len(self.final_pil_images))
+            np.random.shuffle(indexes)
+        else:
+            indexes = np.arange(len(self.final_pil_images))
+
+        #
         # save images list
-        for idx, im in enumerate(self.final_pil_images):
+        for idx in indexes:
+
+            im = self.final_pil_images[idx]
+
             #print self.final_names[idx], self.final_bboxes[idx]
 
             #
             # original foreground image name
-            original_name = self.final_names[idx]
+            original_name = self.final_names[idx]['foreg']
             original_name_noext = original_name[:-4]
 
             #
-            # original background image name [remove _n.png] + '.jpg'
-            back_orig_name_prefix = original_name[:-6]
+            # original background image name
+            back_orig_name_prefix = self.final_names[idx]['backgr']
 
             #
             # new image name
@@ -430,7 +457,7 @@ class DatasetCreator():
                     #print img_annotation
 
             #
-            # add extra annotation from tracer
+            # add extra annotations from tracers
             extra_annotations = self.final_tracers[idx]
 
             #
@@ -442,15 +469,16 @@ class DatasetCreator():
             # set new bounding boxes
             bounding_boxes = self.final_bboxes[idx]
 
-            img_annotation['bndbox'] = {}
-            img_annotation['bndbox']['xmin'] = bounding_boxes[0]
-            img_annotation['bndbox']['ymin'] = bounding_boxes[1]
-            img_annotation['bndbox']['xmax'] = bounding_boxes[2]
-            img_annotation['bndbox']['ymax'] = bounding_boxes[3]
+            img_annotation['object']['bndbox'] = {}
+            img_annotation['object']['bndbox']['xmin'] = bounding_boxes[0]
+            img_annotation['object']['bndbox']['ymin'] = bounding_boxes[1]
+            img_annotation['object']['bndbox']['xmax'] = bounding_boxes[2]
+            img_annotation['object']['bndbox']['ymax'] = bounding_boxes[3]
 
             #
             # voc style adjust
             img_annotation['filename']=new_img_name+'.jpg'
+            img_annotation['orig_background']=back_orig_name_prefix
 
             #
             # create xml
