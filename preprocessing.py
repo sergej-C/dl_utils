@@ -31,11 +31,19 @@ class preprocessing():
         (width, height, channels)
         """
         im_arr = np.fromstring(pil_img.tobytes(), dtype=np.uint8)
-        im_arr = im_arr.reshape((pil_img.size[1], pil_img.size[0], 3))
+
+        if pil_img.mode in ('RGBA', 'LA') or (pil_img.mode == 'P' and 'transparency' in pil_img.info):
+            #
+            # alpha channel
+            n_channels = 4
+        else:
+            n_channels = 3
+
+        im_arr = im_arr.reshape((pil_img.size[1], pil_img.size[0], n_channels))
         return im_arr
 
     @staticmethod
-    def paste_centered_in_point(pil_backg, pil_foreg, points, i):
+    def paste_centered_in_point(pil_backg, pil_foreg, points, i, blur=True):
         """
         for plotting an image with the center at points[i]
 
@@ -57,7 +65,10 @@ class preprocessing():
         cent_x = min(cent_x, int(wb - w))
         cent_y = min(cent_y, int(hb - h))
 
-        pil_backg_cpy.paste(pil_foreg, (cent_x, cent_y), pil_foreg)
+        if blur:
+            pil_backg_cpy = preprocessing.blur_and_merge(pil_backg_cpy, pil_foreg, (cent_x, cent_y))
+        else:
+            pil_backg_cpy.paste(pil_foreg, (cent_x, cent_y), pil_foreg)
         xmin = cent_x
         ymin = cent_y
         xmax = cent_x + w
@@ -66,7 +77,7 @@ class preprocessing():
         return xmin, ymin, xmax, ymax, pil_backg_cpy
 
     @staticmethod
-    def merge_img_in_background(pil_backg, pil_foreg, points):
+    def merge_img_in_background(pil_backg, pil_foreg, points, blur=True):
         """
 
         :param pil_backg:
@@ -79,7 +90,7 @@ class preprocessing():
         merged = []
         bboxes = []
         for i,p in enumerate(points):
-            xmin, ymin, xmax, ymax, pil_backg_merged = preprocessing.paste_centered_in_point(pil_backg, pil_foreg, points, i)
+            xmin, ymin, xmax, ymax, pil_backg_merged = preprocessing.paste_centered_in_point(pil_backg, pil_foreg, points, i, blur=blur)
             merged.append(pil_backg_merged)
             bboxes.append(np.array((xmin, ymin, xmax, ymax)))
         return merged, bboxes
@@ -353,6 +364,42 @@ class preprocessing():
     @staticmethod
     def write_pil_im(pil_im, path_name_with_ext, type="JPEG"):
         pil_im.save(path_name_with_ext, type)
+
+
+    @staticmethod
+    def blur_and_merge(pil_background, pil_foreground, points, radius=5):
+        """
+
+        :param pil_background:
+        :param pil_foreground:
+        :param points:
+        :param radius:
+        :return:
+        """
+        src = preprocessing.pil_image_to_array(pil_foreground)
+
+        alpha = src[:, :, -1]
+
+        im2, contours, hierarchy = cv2.findContours(alpha.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # print contours[0]
+
+        kernel = np.ones((radius, radius), np.uint8)
+
+        mask = np.zeros(alpha.shape, np.uint8)
+
+        cv2.drawContours(mask, [contours[0]], -1, (255, 255, 255), cv2.FILLED)
+
+        mask = cv2.erode(mask, kernel)
+        mask_to_blur = mask.copy()
+        bluried_mask = cv2.GaussianBlur(mask_to_blur, (radius, radius), 0)
+
+        pil_mask_bluried = PIL.Image.fromarray(bluried_mask)
+
+        pil_back_copy = pil_background.copy()
+        pil_back_copy.paste(pil_foreground, (int(points[0]), int(points[1])), pil_mask_bluried)
+        return pil_back_copy
+
+
 
 
 if __name__ == '__main__':
