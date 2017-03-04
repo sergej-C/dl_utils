@@ -312,13 +312,14 @@ class DatasetCreator():
                 else:
                     back_obj=back
                     back_tracer=TransformationTracer(back)
-                chosen_point = self.choose_point(back_obj, modified_foreg.obj)
 
-                #print "chosen point {}".format(chosen_point)
+                # print "chosen point {}".format(chosen_point)
                 preprocessing.check_merging_size(
                     back_tracer.obj,
                     modified_foreg.obj
                 )
+
+                chosen_point = self.choose_point(back_obj, modified_foreg.obj)
 
                 pil_merged, bboxes = (
                     preprocessing.merge_img_in_background(
