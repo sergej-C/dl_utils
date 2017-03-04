@@ -30,6 +30,7 @@ class DatasetCreator():
                  list_transformation_to_call_back,
                  list_transformation_to_call_foreg,
                  output_folder_path,
+                 choose_n_random_background=-1,
                  shuffle=True,
                  blur_merge=True,
                  base_path_background_points_xml=None,
@@ -173,6 +174,10 @@ class DatasetCreator():
         # if True use opencv poisson method for merging background and foreground images
         self.blur_merge = blur_merge
 
+        ##
+        # if != -1 choose n random backgrounds from the list of backgrounds
+        self.choose_n_random_background = choose_n_random_background
+
     def choose_point(self, back_pil, fore_pil):
         """
         get points randomly or from xml annotation file associate with
@@ -215,6 +220,11 @@ class DatasetCreator():
         # checks all images can be loaded from PIL (if empty file -> removed)
         imu.check_imgs_list_and_rm_empty(self.foreground_list)
         imu.check_imgs_list_and_rm_empty(self.background_list)
+
+        if self.choose_n_random_background != -1:
+            self.background_list = np.random.choice(self.background_list, self.choose_n_random_background)
+            print self.background_list
+
 
         # every element is a list of Tracer with PIL Image as subject
         transformed_list_foreg = []
@@ -647,7 +657,8 @@ if __name__ == '__main__':
         func_back_params, func_foreg_params,
         func_to_back, func_to_foreg,
         output_folder_path='/tmp',
-        db_conf=db_conf
+        db_conf=db_conf,
+        choose_n_random_background=1
     )
 
 
