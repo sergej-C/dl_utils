@@ -206,9 +206,9 @@ class DatasetCreator():
 
         #
         # get the list of foregrounds and backgrounds
-        self.foreground_list = glob(self.base_path_foreground_glob)[:2]
+        self.foreground_list = glob(self.base_path_foreground_glob)
 
-        self.background_list = glob(self.base_path_backgrounds_glob)[:2]
+        self.background_list = glob(self.base_path_backgrounds_glob)
 
         print len(self.foreground_list), len(self.background_list)
 
@@ -370,12 +370,12 @@ class DatasetCreator():
                         all_final_bbox.append(all_boxes[i])
                         all_final_names.append(all_names[i])
 
+           
+        if post_merge_done:
             del all_merged
             del all_boxes
             del all_tracers
             del all_names
-
-        if post_merge_done:
 
             #
             # to list
@@ -391,8 +391,8 @@ class DatasetCreator():
         else:
             self.final_tracers = all_tracers
             self.final_pil_images = all_merged
-            self.final_names = all_final_names
-            self.final_bboxes = all_final_bbox
+            self.final_names = all_names
+            self.final_bboxes = all_boxes
 
 
         print  "final_tracers len {}, final_pil_images {}, final_names len {}, type tracer[0] {}, type pil[0]".format(
@@ -439,6 +439,7 @@ class DatasetCreator():
             new_img_name = original_name_noext+'_mod_'+str(idx)
 
             img_annotation = {}
+
             img_annotation['object'] = {}
 
             #
@@ -452,9 +453,9 @@ class DatasetCreator():
                     for k in rec_img.get_keys():
                         #
                         # insert without prefix bs_
-                        img_annotation['object'][k[3:]] = rec_img.__getattr__(k)
+                        img_annotation['object'][str(k[3:])] = rec_img.__getattr__(k)
 
-                    #print img_annotation
+                img_annotation['object']['name'] = img_annotation['object']['class']
 
             #
             # add extra annotations from tracers
@@ -475,15 +476,21 @@ class DatasetCreator():
             img_annotation['object']['bndbox']['xmax'] = bounding_boxes[2]
             img_annotation['object']['bndbox']['ymax'] = bounding_boxes[3]
 
+
             #
             # voc style adjust
             img_annotation['filename']=new_img_name+'.jpg'
             img_annotation['orig_background']=back_orig_name_prefix
+            img_annotation['folder']=self.name
 
             #
-            # create xml
-            _xml = dict2xml(img_annotation, roottag='annotation')
-            #print _xml
+            # TODO - annotate
+            img_annotation['object']['truncated'] = 0
+            img_annotation['segmented'] = 0
+            img_annotation['size'] = {}
+            sz = im.size
+            img_annotation['size']['width'] = sz[0]
+            img_annotation['size']['height'] = sz[1]
 
             #
             # create faster_rcnn voc style folders
@@ -491,7 +498,24 @@ class DatasetCreator():
 
             #
             # save images
-            preprocessing.write_pil_im(im, os.path.join(self.output_folder_path, self.name, 'JPEGImages', new_img_name+'.jpg'))
+            path_save = os.path.join(self.output_folder_path, self.name, 'JPEGImages',
+                                                        new_img_name + '.jpg')
+
+            preprocessing.write_pil_im(im, path_save)
+
+            #
+            # reload image to know bits [only jpeg]
+            try:
+                img_annotation['size']['depth'] = im.bits
+            except:
+                imjpg = PIL.Image.open(path_save)
+                img_annotation['size']['depth'] = imjpg.bits
+
+
+            #
+            # create xml
+            _xml = dict2xml(img_annotation, roottag='annotation')
+            #print _xml
 
             #
             # save xml annotations
@@ -550,25 +574,27 @@ if __name__ == '__main__':
     import fish_utils as fu
 
     fut = fu.fish_utils()
-    back_path = fut.get_selected_background_path_glob()
-    foreg_path = fut.get_bboxed_selected_path_all_class_glob()
+    back_path = fut.get_selected_background_path_glob(type="debug")
+    foreg_path = fut.get_bboxed_selected_path_all_class_glob(type="debug")
 
-    func_to_foreg = ['rotate', 'scale']
+    #
+    # TODO - do merging without any transformation
+    func_to_foreg = ['rotate']
 
     func_foreg_params = {
         'rotate': {
             'func': preprocessing.rotate_img_by_angle,
-            'param': range_utils.choice_n_rnd_numbers_from_to_linspace(0, 180, 30, 3, integer=True)
+            'param': range_utils.choice_n_rnd_numbers_from_to_linspace(0, 360, 30, 1, integer=True)
         },
         'scale': {
             'func': preprocessing.rescale_img_by_ratio,
-            'param': range_utils.choice_n_rnd_numbers_from_to_linspace(.8, 1.2, 20, 2)
+            'param': range_utils.choice_n_rnd_numbers_from_to_linspace(.8, 1.2, 10, 1)
         }
     }
 
     func_to_back = {
         'pre_merge': [],
-        'post_merge':['color','green']
+        'post_merge':[]
     }
     func_back_params = {
         'pre_merge' : {
@@ -606,7 +632,7 @@ if __name__ == '__main__':
     }
 
     d = DatasetCreator(
-        'testing',
+        'debug',
         back_path, foreg_path,
         func_back_params, func_foreg_params,
         func_to_back, func_to_foreg,
