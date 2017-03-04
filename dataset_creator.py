@@ -315,7 +315,7 @@ class DatasetCreator():
 
                 # print "chosen point {}".format(chosen_point)
                 preprocessing.check_merging_size(
-                    back_tracer.obj,
+                    back_obj,
                     modified_foreg.obj
                 )
 
@@ -324,7 +324,7 @@ class DatasetCreator():
                 pil_merged, bboxes = (
                     preprocessing.merge_img_in_background(
 
-                        back_tracer.obj,
+                        back_obj,
                         modified_foreg.obj,
                         [chosen_point],
                         self.blur_merge
