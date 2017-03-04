@@ -31,13 +31,17 @@ class DatasetCreator():
                  list_transformation_to_call_foreg,
                  output_folder_path,
                  choose_n_random_background=-1,
+                 random_background_for_all=False,
                  shuffle=True,
                  blur_merge=True,
                  base_path_background_points_xml=None,
                  class_names=None,
-                 db_conf=None
+                 db_conf=None,
+                 debug=False
 
                  ):
+
+        self.DEBUG = debug
 
         #
         # dataset name
@@ -175,8 +179,26 @@ class DatasetCreator():
         self.blur_merge = blur_merge
 
         ##
+        # if True random background for all foreground
+        self.random_background_for_all = random_background_for_all
+
+        ##
         # if != -1 choose n random backgrounds from the list of backgrounds
+        # valid only if random_background_for_all is False
         self.choose_n_random_background = choose_n_random_background
+
+        #
+        # utility class for parsing voc style xml
+        self.fast_ut = fast_ut.faster_rcnn_utils()
+
+        ##
+        # number of final saved images
+        self.img_counter = 0
+
+        ##
+        # used to iterate over all or some maybe random background
+        self.curr_back_img_list = None
+
 
     def choose_point(self, back_pil, fore_pil):
         """
@@ -204,27 +226,22 @@ class DatasetCreator():
             center_y = range_utils.choice_n_rnd_numbers_from_to_linspace(0, hb-hf, hb-hf ,1)[0]
             return (center_x, center_y)
 
+    def check_random_list_and_select(self):
 
+        if self.choose_n_random_background != -1 and not self.random_background_for_all:
+            self.background_list = np.random.choice(self.background_list, self.choose_n_random_background)
 
+    def check_random_list_and_select_copy(self):
+        if self.choose_n_random_background != -1 and self.random_background_for_all:
+            return np.random.choice(self.background_list, self.choose_n_random_background)
+
+    ##
+    # too high ram usage, use create_random_background_for_foreground
     def create(self):
 
+        self.get_glob_paths()
 
-        #
-        # get the list of foregrounds and backgrounds
-        self.foreground_list = glob(self.base_path_foreground_glob)
-
-        self.background_list = glob(self.base_path_backgrounds_glob)
-
-        print len(self.foreground_list), len(self.background_list)
-
-        # checks all images can be loaded from PIL (if empty file -> removed)
-        imu.check_imgs_list_and_rm_empty(self.foreground_list)
-        imu.check_imgs_list_and_rm_empty(self.background_list)
-
-        if self.choose_n_random_background != -1:
-            self.background_list = np.random.choice(self.background_list, self.choose_n_random_background)
-            print self.background_list
-
+        self.check_random_list_and_select()
 
         # every element is a list of Tracer with PIL Image as subject
         transformed_list_foreg = []
@@ -247,7 +264,8 @@ class DatasetCreator():
             for it in foreg_transformer.all_items:
                 all_foreg_names.append(foreg_names[idx])
 
-        print "transformed_list_foreg len {}".format(len(transformed_list_foreg))
+        if self.DEBUG:
+            print "transformed_list_foreg len {}".format(len(transformed_list_foreg))
 
         #
         # list of transformed background list, one for pre_merge
@@ -278,8 +296,6 @@ class DatasetCreator():
                 transformed_list_back_premerge.append(back_transformer.all_items)
                 for it in back_transformer.all_items:
                     all_bkgr_names.append(backgr_names[idx])
-
-            #print "transformed_list_back_premerge pre_merge len {}".format(len(transformed_list_back_premerge))
 
         #
         # if there was pre_merge transformation merge foreground with those new background
@@ -323,7 +339,8 @@ class DatasetCreator():
                     back_obj=back
                     back_tracer=TransformationTracer(back)
 
-                # print "chosen point {}".format(chosen_point)
+                if self.DEBUG:
+                    print "chosen point {}".format(chosen_point)
                 preprocessing.check_merging_size(
                     back_obj,
                     modified_foreg.obj
@@ -417,6 +434,314 @@ class DatasetCreator():
         )
 
         self.save_finals()
+
+    def get_glob_paths(self):
+        #
+        # get the list of foregrounds and backgrounds
+        self.foreground_list = glob(self.base_path_foreground_glob)
+
+        self.background_list = glob(self.base_path_backgrounds_glob)
+
+
+        # checks all images can be loaded from PIL (if empty file -> removed)
+        imu.check_imgs_list_and_rm_empty(self.foreground_list)
+        imu.check_imgs_list_and_rm_empty(self.background_list)
+
+        print len(self.foreground_list), len(self.background_list)
+
+
+    def create_random_background_for_foreground(self):
+        ##
+        # in this case every foreground will be merged to a different random chosen background
+        # not append in list but save directly
+
+        self.get_glob_paths()
+
+        self.check_random_list_and_select()
+
+        # every element is a list of Tracer with PIL Image as subject
+        foreg_names = [imp.split('/')[-1] for imp in self.foreground_list]
+        foreg_img_list = [preprocessing.open_image(imp) for imp in self.foreground_list]
+
+        ##
+        # apply transformation for all foreground
+        # every transformation return a list of modified foregrounds
+        for idx, im in enumerate(foreg_img_list):
+
+            if len(self.list_transformation_to_call_foreg)>0:
+                foreg_transformer = CombinatorialTransformer(
+                    self.list_transformation_to_call_foreg,
+                    self.list_transformation_foreground,
+                    im)
+
+                foreg_transformer.apply_transformations()
+                all_foreg = foreg_transformer.all_items
+            else:
+                all_foreg = [TransformationTracer(im)]
+
+            for transformed_foreg in all_foreg:
+                foreg_name = (foreg_names[idx])
+
+                ##
+                # for every foreground transformed image choice n random background
+                # if option is True else do for all background
+                new_back_list = self.check_random_list_and_select_copy()
+                random_back = True
+                if new_back_list is None:
+                    new_back_list = self.background_list
+                    random_back = False
+
+                if self.DEBUG:
+                    print "using n background {}".format(len(new_back_list))
+
+                #
+                # len of pre_merged transformations
+                len_premerge_transformation = len(self.list_transformation_to_call_back['pre_merge'])
+
+                #
+                # list of background PIL images
+                if random_back or self.curr_back_img_list is None:
+                    self.curr_back_img_list = [preprocessing.open_image(imp) for imp in new_back_list]
+                    self.backgr_names = [imp.split('/')[-1] for imp in self.background_list]
+
+                #
+                # pre_merge transformation if exists
+                #
+                # if there was pre_merge transformation merge foreground with those new background
+                # otherwise merge with original background
+                if len_premerge_transformation > 0:
+
+                    for bidx, im in enumerate(self.curr_back_img_list):
+
+                        back_transformer = CombinatorialTransformer(
+                            self.list_transformation_to_call_back['pre_merge'],
+                            self.list_transformation_background['pre_merge'],
+                            im
+                        )
+                        back_transformer.apply_transformations()
+
+                        ##
+                        # for every background create final image
+                        for merged_back in back_transformer.all_items:
+                            self.merge_and_save(merged_back, transformed_foreg, foreg_name,  self.backgr_names[bidx])
+                else:
+                    for bidx, im in enumerate(self.curr_back_img_list):
+                        self.merge_and_save(TransformationTracer(im), transformed_foreg, foreg_name, self.backgr_names[bidx])
+
+    def merge_and_save(self, back_tracer, foreg_tracer, foreg_name, back_name):
+
+        preprocessing.check_merging_size(
+            back_tracer.obj,
+            foreg_tracer.obj
+        )
+
+        chosen_point = self.choose_point(back_tracer.obj, foreg_tracer.obj)
+
+        pil_merged, bboxes = (
+            preprocessing.merge_img_in_background(
+                back_tracer.obj,
+                foreg_tracer.obj,
+                [chosen_point],
+                self.blur_merge
+            )
+        )
+
+        ##
+        # for tracing old transformations
+        new_tracer = TransformationTracer.merge(foreg_tracer, back_tracer)
+
+        #
+        # len of post_merged transformations
+        len_postmerge_transformation = len(self.list_transformation_to_call_back['post_merge'])
+
+        #
+        # if exist do post_merge transformations
+        if (len_postmerge_transformation) > 0:
+
+            # TODO - important if rotate or scale recalculate bbox
+            back_transformer = CombinatorialTransformer(
+                self.list_transformation_to_call_back['post_merge'],
+                self.list_transformation_background['post_merge'],
+                pil_merged[0],
+                new_tracer
+            )
+            back_transformer.apply_transformations()
+
+            #
+            # all have the same bbox
+            for transformed_back in back_transformer.all_items:
+                self.save_final_image(transformed_back, bboxes[0], foreg_name, back_name)
+
+        else:
+            self.save_final_image(TransformationTracer(pil_merged[0]), bboxes[0], foreg_name, back_name)
+
+    def create_annotation(self, original_name_noext):
+
+        img_annotation = {}
+
+        img_annotation['object'] = {}
+
+        #
+        # get extra annotation from db
+        if self.db_conf is not None:
+            # print "search for img {}".format(original_name_noext)
+            rec_img = self.get_bbox_from_db(original_name_noext + '.jpg')
+
+            if rec_img is not None:
+
+                for k in rec_img.get_keys():
+                    #
+                    # insert without prefix bs_
+                    img_annotation['object'][str(k[3:])] = rec_img.__getattr__(k)
+
+            try:
+                img_annotation['object']['name'] = img_annotation['object']['class']
+            except:
+                print "image {} have no class field in db ".format(rec_img)
+                return
+
+        return img_annotation
+
+    def merge_annotation(self, img_annotation, extra_annotations):
+        #
+        # add extra annotations from tracers
+
+        #
+        # to dict
+        img_annotation = merge_lists(img_annotation,
+             two_list_to_dict(extra_annotations.applied_funcs_names,
+                              extra_annotations.params))
+
+        return img_annotation
+
+    def set_bbox_annotation(self, img_annotation, bboxes):
+
+        #
+        # set new bounding boxes
+        bounding_boxes = bboxes
+
+        img_annotation['object']['bndbox'] = {}
+        img_annotation['object']['bndbox']['xmin'] = bounding_boxes[0]
+        img_annotation['object']['bndbox']['ymin'] = bounding_boxes[1]
+        img_annotation['object']['bndbox']['xmax'] = bounding_boxes[2]
+        img_annotation['object']['bndbox']['ymax'] = bounding_boxes[3]
+
+        return img_annotation
+
+    def set_voc_style_annotation(self, img_annotation, im, new_img_name, back_orig_name_prefix):
+
+        # voc style adjust
+        img_annotation['filename'] = new_img_name + '.jpg'
+        img_annotation['orig_background'] = back_orig_name_prefix
+        img_annotation['folder'] = self.name
+
+        #
+        # TODO - annotate
+        img_annotation['object']['truncated'] = 0
+        img_annotation['segmented'] = 0
+
+        img_annotation['size'] = {}
+        sz = im.size
+        img_annotation['size']['width'] = sz[0]
+        img_annotation['size']['height'] = sz[1]
+
+        return img_annotation
+
+    def set_depth_in_annotation(self,img_annotation, path_save):
+
+        #
+        # reload image to know bits [only jpeg]
+        try:
+            img_annotation['size']['depth'] = im.bits
+        except:
+            imjpg = PIL.Image.open(path_save)
+            img_annotation['size']['depth'] = imjpg.bits
+
+        return img_annotation
+
+    def create_folders_and_write_img(self, new_img_name, im):
+
+        #
+        # create faster_rcnn voc style folders
+        self.fast_ut.create_base_folders(self.output_folder_path, self.name)
+
+        #
+        # save images
+        path_save = os.path.join(self.output_folder_path, self.name, 'JPEGImages',
+                                 new_img_name + '.jpg')
+
+        if self.DEBUG:
+            print "saving {}".format(path_save)
+
+        preprocessing.write_pil_im(im, path_save)
+
+
+    def create_xml_and_save(self, img_annotation, new_img_name):
+
+
+        #
+        # create xml
+        _xml = dict2xml(img_annotation, roottag='annotation')
+        # print _xml
+
+        xml_path = os.path.join(self.output_folder_path,
+                               self.name, 'Annotations',
+                               new_img_name + '.xml')
+        if self.DEBUG:
+            print "saving {}".format(xml_path)
+
+        #
+        # save xml annotations
+        save_text_in_file(_xml,
+                  xml_path)
+
+
+    def cat_img_name_in_txt_file(self, new_img_name):
+
+        if self.DEBUG:
+            print "call to cat in txt for {}".format(new_img_name)
+        #
+        # append in image list file
+        append_txt_to_file(new_img_name,
+                   os.path.join(self.output_folder_path,
+                                self.name, 'ImageSets', 'Main',
+                                self.name + '.txt'))
+
+    def save_final_image(self, pil_merged_tracer, bboxes, foreg_name, back_name):
+
+        im = pil_merged_tracer.obj
+
+        #
+        # original foreground image name
+        original_name = foreg_name
+        original_name_noext = original_name[:-4]
+
+        #
+        # original background image name
+        back_orig_name_prefix = back_name
+
+        #
+        # new image name
+        new_img_name = original_name_noext + '_mod_' + str(self.img_counter)
+
+        img_annotation = self.create_annotation(original_name_noext)
+
+        if img_annotation is None: return
+
+        img_annotation = self.merge_annotation(img_annotation, pil_merged_tracer)
+
+        img_annotation = self.set_bbox_annotation(img_annotation, bboxes)
+
+        img_annotation = self.set_voc_style_annotation(img_annotation, im, new_img_name, back_orig_name_prefix)
+
+        self.create_folders_and_write_img(new_img_name, im)
+
+        self.create_xml_and_save(img_annotation, new_img_name)
+
+        self.cat_img_name_in_txt_file(new_img_name)
+
+        self.img_counter+=1
+
 
 
     def save_finals(self, plot=False):
@@ -597,9 +922,7 @@ if __name__ == '__main__':
     back_path = fut.get_selected_background_path_glob(type="debug")
     foreg_path = fut.get_bboxed_selected_path_all_class_glob(type="debug")
 
-    #
-    # TODO - do merging without any transformation
-    func_to_foreg = ['rotate']
+
 
     func_foreg_params = {
         'rotate': {
@@ -612,10 +935,6 @@ if __name__ == '__main__':
         }
     }
 
-    func_to_back = {
-        'pre_merge': [],
-        'post_merge':[]
-    }
     func_back_params = {
         'pre_merge' : {
             'contrast': {
@@ -651,6 +970,49 @@ if __name__ == '__main__':
         'table_name': 'bbox_selection'
     }
 
+    ##
+    # no preprocessing
+    # only merging, choose n background random for every foreg
+    TEST_1=False
+
+    ##
+    # no preprocessing, choose all background, not random
+    TEST_2=False
+
+    ##
+    # preprocessing on foreg and background, random back, verify ram usage
+    TEST_3=True
+
+
+    if TEST_1:
+        func_to_foreg = []
+        func_to_back = {
+            'pre_merge': [],
+            'post_merge':[]
+        }
+        n_back = 2
+        rand_back_for_all = True
+
+
+    if TEST_2:
+        func_to_foreg = []
+        func_to_back = {
+            'pre_merge': [],
+            'post_merge':[]
+        }
+        n_back = -1
+        rand_back_for_all = False
+
+    if TEST_3:
+        func_to_foreg = ['rotate','scale']
+        func_to_back = {
+            'pre_merge': [],
+            'post_merge':['light','green','contrast','color']
+        }
+        n_back = 2
+        rand_back_for_all = True
+
+
     d = DatasetCreator(
         'debug',
         back_path, foreg_path,
@@ -658,8 +1020,10 @@ if __name__ == '__main__':
         func_to_back, func_to_foreg,
         output_folder_path='/tmp',
         db_conf=db_conf,
-        choose_n_random_background=1
+        choose_n_random_background=n_back,
+        random_background_for_all=rand_back_for_all,
+        debug=True
     )
 
 
-    d.create()
+    d.create_random_background_for_foreground()
