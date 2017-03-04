@@ -461,7 +461,11 @@ class DatasetCreator():
                         # insert without prefix bs_
                         img_annotation['object'][str(k[3:])] = rec_img.__getattr__(k)
 
-                img_annotation['object']['name'] = img_annotation['object']['class']
+                try:
+                    img_annotation['object']['name'] = img_annotation['object']['class']
+                except:
+                    print "image {} have no class field in db ".format(new_img_name)
+                    continue
 
             #
             # add extra annotations from tracers
