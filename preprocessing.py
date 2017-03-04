@@ -410,7 +410,56 @@ class preprocessing():
         pil_back_copy.paste(pil_foreground, (int(points[0]), int(points[1])), pil_mask_bluried)
         return pil_back_copy
 
+    @staticmethod
+    def check_merging_size(pil_back, pil_foreg, pix_to_remove_ratio_respect_back=.8):
+        sz_back=pil_back.size
+        sz_foreg=pil_foreg.size
 
+        if sz_back[0]<sz_foreg[0] or sz_back[1]<sz_foreg[1]:
+            print "background image size is < foreground image, resize foreground"
+            max_size=max(sz_foreg[0], sz_foreg[1])
+            if max_size==sz_foreg[0]:
+                idx_max=0
+                idx_min=1
+            else:
+                idx_max=1
+                idx_min=0
+
+            new_side=sz_back[idx_max]*pix_to_remove_ratio_respect_back
+            old_ratio = float(sz_foreg[idx_max]/sz_foreg[idx_min])
+            new_other_side=new_side*old_ratio
+            new_sz=[0, 0]
+            new_sz[idx_max]=new_side
+            new_sz[idx_min]=new_other_side
+
+            preprocessing.resize(pil_foreg, new_sz)
+
+    # @staticmethod
+    # def resize_from_other_ratio_to_new(pil_toresize, pil_get_ratio_from, pil_get_ratio_to):
+    #     """
+    #     get aspect ratio respect one image and recalculate for merging in a new image
+    #     to maintain the original size in the new image [respect to the width]
+    #     :param pil_toresize:
+    #     :param pil_get_ratio_from:
+    #     :param pil_get_ratio_to:
+    #     :return:
+    #     """
+    #     sz = pil_toresize.size
+    #     from_sz = pil_get_ratio_from.size
+    #     to_sz = pil_get_ratio_to.size
+    #
+    #     toresize_width = sz[0]
+    #     from_width = from_sz[0]
+    #     to_width = to_sz[0]
+    #
+    #     #
+    #     # ratio between toresize width and its original image width
+    #     orig_w_ratio = float(toresize_width / from_width)
+
+
+    @staticmethod
+    def resize(pil_img, new_sz):
+        pil_img.thumbnail(new_sz, PIL.Image.ANTIALIAS)
 
 
 if __name__ == '__main__':
@@ -425,8 +474,9 @@ if __name__ == '__main__':
     TEST_MASK=False
     TEST_FILTERS=False
     TEST_LIGHT=False
-    TEST_COLOR=True
+    TEST_COLOR=False
     TEST_CONTRAST=False
+    TEST_RESIZE=True
 
     fut = fu.fish_utils()
     ex_background = fut.get_test_selected_background()
@@ -493,3 +543,9 @@ if __name__ == '__main__':
         #new_ = preprocessing.change_color_img_by_factors(pil_backg, factors, show=True)
         _new = preprocessing.apply_green_mask_pil_img(pil_backg, plot=False)
         _new.show()
+
+    if TEST_RESIZE or ALL_TRUE:
+
+        preprocessing.check_merging_size(pil_foreg, pil_backg)
+        _new, bb = preprocessing.merge_img_in_background(pil_foreg, pil_backg, [(0,0)])
+        _new[0].show()

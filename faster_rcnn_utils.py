@@ -19,7 +19,7 @@ plt.rcParams['image.interpolation'] = 'nearest'
 #plt.rcParams['image.cmap'] = 'gray'
 
 import data_utils as du
-import dlc_utils as dlcu
+#import dlc_utils as dlcu
 
 class faster_rcnn_utils():
     KAGGLE_PATH=os.environ.get('KAGGLE_PATH')
