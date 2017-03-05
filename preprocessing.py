@@ -210,6 +210,11 @@ class preprocessing():
             ax2.imshow(img_masked)
             plt.show()
 
+        del img_color
+        del img_hsv
+        del color_mask
+        del color_mask_hsv
+
         return img_masked
 
     @staticmethod
@@ -226,8 +231,11 @@ class preprocessing():
 
         img_arr = preprocessing.pil_image_to_array(pil_img)
         img_arr_masked = preprocessing.apply_green_mask(img_arr, plot=plot)
-        print img_arr_masked.dtype
-        return PIL.Image.fromarray(img_as_ubyte(img_arr_masked), mode='RGB')
+        del img_arr
+        #print img_arr_masked.dtype
+        masked = PIL.Image.fromarray(img_as_ubyte(img_arr_masked), mode='RGB')
+        del img_arr_masked
+        return masked
 
     @staticmethod
     def apply_filter(pil_img, filter_key):
@@ -320,7 +328,6 @@ class preprocessing():
 
         if show:
             enhanced.show()
-
         return enhanced
 
     @staticmethod

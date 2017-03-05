@@ -32,6 +32,7 @@ class DatasetCreator():
                  list_transformation_to_call_foreg,
                  output_folder_path,
                  choose_n_random_background=-1,
+                 img_name_prefix='',
                  random_background_for_all=False,
                  shuffle=True,
                  blur_merge=True,
@@ -199,6 +200,10 @@ class DatasetCreator():
         ##
         # used to iterate over all or some maybe random background
         self.curr_back_img_list = None
+
+        ##
+        # prepend to img names
+        self.img_name_prefix = img_name_prefix
 
 
     def choose_point(self, back_pil, fore_pil):
@@ -471,6 +476,8 @@ class DatasetCreator():
         for imp in self.foreground_list:
 
             idx+=1
+            if self.DEBUG:
+                print "================FOREG[{}]========================".format(idx)
             im = preprocessing.open_image(imp)
             if len(self.list_transformation_to_call_foreg)>0:
 
@@ -484,7 +491,13 @@ class DatasetCreator():
             else:
                 all_foreg = [TransformationTracer(im)]
 
+            call_f=-1
             for transformed_foreg in all_foreg:
+
+                call_f+=1
+                if self.DEBUG:
+                    print "================transformed_foreg[{}]========================".format(call_f)
+
                 foreg_name = (foreg_names[idx])
 
                 ##
@@ -521,6 +534,9 @@ class DatasetCreator():
                     im = preprocessing.open_image(imp)
                     backgr_name = imp.split('/')[-1]
 
+                    if self.DEBUG:
+                        print "================curr_back_img_list[{}]========================".format(bidx)
+
                     if len_premerge_transformation > 0:
 
                             back_transformer = CombinatorialTransformer(
@@ -533,12 +549,27 @@ class DatasetCreator():
 
                             ##
                             # for every background create final image
+                            cmerged=-1
                             for merged_back in back_transformer.all_items:
+                                cmerged+=1
+                                if self.DEBUG:
+                                    print "================merged_back[{}]========================".format(cmerged)
+
                                 self.merge_and_save(merged_back, transformed_foreg, foreg_name,  backgr_name)
+                                merged_back.clear()
+                                del merged_back
                     else:
-                            self.merge_and_save(TransformationTracer(im), transformed_foreg, foreg_name, backgr_name)
+                        if self.DEBUG:
+                            print "================merged_back[{}]========================"
+                        back_tracer = TransformationTracer(im)
+                        self.merge_and_save(back_tracer, transformed_foreg, foreg_name, backgr_name)
+                        back_tracer.clear()
+                        del back_tracer
 
                     bidx+=1
+
+                transformed_foreg.clear()
+                del transformed_foreg
 
 
     def merge_and_save(self, back_tracer, foreg_tracer, foreg_name, back_name):
@@ -587,6 +618,8 @@ class DatasetCreator():
 
         else:
             self.save_final_image(TransformationTracer(pil_merged[0]), bboxes[0], foreg_name, back_name)
+
+        print "saved {} images and annotation files".format(self.img_counter)
 
     def create_annotation(self, original_name_noext):
 
@@ -733,7 +766,7 @@ class DatasetCreator():
 
         #
         # new image name
-        new_img_name = original_name_noext + '_mod_' + str(self.img_counter)
+        new_img_name = self.img_name_prefix + '_'+ original_name_noext + '_mod_' + str(self.img_counter)
 
         img_annotation = self.create_annotation(original_name_noext)
 
@@ -751,7 +784,7 @@ class DatasetCreator():
 
         self.create_xml_and_save(img_annotation, new_img_name)
 
-        self.cat_img_name_in_txt_file(new_img_name)
+        self.cat_img_name_in_txt_file(new_img_name.strip())
 
         self.img_counter+=1
 
@@ -996,7 +1029,12 @@ if __name__ == '__main__':
 
     ##
     # preprocessing on foreg and background, random back, verify ram usage
-    TEST_3=True
+    TEST_3=False
+
+    ##
+    # scale first, then rotate, append to existing dataset with prefix
+    # different random background for each transformation
+    TEST_4=True
 
 
     if TEST_1:
@@ -1027,6 +1065,39 @@ if __name__ == '__main__':
         n_back = 2
         rand_back_for_all = True
 
+    if TEST_4:
+        func_to_foreg = ['rotate']
+        func_to_back = {
+            'pre_merge': [],
+            'post_merge':[]
+        }
+        n_back = 2
+        rand_back_for_all = True
+
+
+        d = DatasetCreator(
+            'debug',
+            back_path, foreg_path,
+            func_back_params, func_foreg_params,
+            func_to_back, func_to_foreg,
+            output_folder_path='/tmp',
+            db_conf=db_conf,
+            choose_n_random_background=n_back,
+            random_background_for_all=rand_back_for_all,
+            img_name_prefix='test3_rotate',
+            debug=True
+        )
+        d.create_random_background_for_foreground()
+
+
+        func_to_foreg = ['scale']
+        func_to_back = {
+            'pre_merge': [],
+            'post_merge': ['color','green']
+        }
+        n_back = 2
+        rand_back_for_all = True
+
 
     d = DatasetCreator(
         'debug',
@@ -1037,6 +1108,7 @@ if __name__ == '__main__':
         db_conf=db_conf,
         choose_n_random_background=n_back,
         random_background_for_all=rand_back_for_all,
+        img_name_prefix='test3',
         debug=True
     )
 

@@ -3,6 +3,7 @@ from pprint import pprint
 import copy
 import collections
 import numpy as np
+import sys
 
 class CombinatorialTransformer():
     def __init__(self, func_to_call, func_data, subject, tracer=None):
@@ -106,6 +107,7 @@ class TransformationTracer():
         self.applied_funcs_names.append(f.__name__)
         print "appended f {} funcs {}".format(f.__name__, self.applied_funcs_names)
 
+
     def add_param(self, p):
         self.params.append(p)
         print "appended p {} param {}".format(p, self.params)
@@ -135,6 +137,11 @@ class TransformationTracer():
     def ensure_iterable(self, el):
         if not isinstance(el, collections.Iterable):
             return [el]
+
+    def clear(self):
+        del self.obj
+        del self.applied_funcs
+        del self.applied_funcs_names
 
     @staticmethod
     def merge(tracer1, tracer2):
