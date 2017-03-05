@@ -451,7 +451,6 @@ class DatasetCreator():
         print len(self.foreground_list), len(self.background_list)
 
 
-    @profile
     def create_random_background_for_foreground(self):
         ##
         # in this case every foreground will be merged to a different random chosen background
@@ -541,7 +540,7 @@ class DatasetCreator():
 
                     bidx+=1
 
-    @profile
+
     def merge_and_save(self, back_tracer, foreg_tracer, foreg_name, back_name):
 
         preprocessing.check_merging_size(
@@ -673,7 +672,6 @@ class DatasetCreator():
 
         return img_annotation
 
-    @profile
     def create_folders_and_write_img(self, new_img_name, im):
 
         #
@@ -690,7 +688,6 @@ class DatasetCreator():
 
         preprocessing.write_pil_im(im, path_save)
 
-    @profile
     def create_xml_and_save(self, img_annotation, new_img_name):
 
 
@@ -710,7 +707,6 @@ class DatasetCreator():
         save_text_in_file(_xml,
                   xml_path)
 
-    @profile
     def cat_img_name_in_txt_file(self, new_img_name):
 
         if self.DEBUG:
@@ -722,7 +718,6 @@ class DatasetCreator():
                                 self.name, 'ImageSets', 'Main',
                                 self.name + '.txt'))
 
-    @profile
     def save_final_image(self, pil_merged_tracer, bboxes, foreg_name, back_name):
 
         im = pil_merged_tracer.obj
