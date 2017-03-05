@@ -574,10 +574,12 @@ class DatasetCreator():
 
     def merge_and_save(self, back_tracer, foreg_tracer, foreg_name, back_name):
 
+        print "pre size {} {}".format(back_tracer.obj.size, foreg_tracer.obj.size)
         preprocessing.check_merging_size(
             back_tracer.obj,
             foreg_tracer.obj
         )
+        print "post size {} {}".format(back_tracer.obj.size, foreg_tracer.obj.size)
 
         chosen_point = self.choose_point(back_tracer.obj, foreg_tracer.obj)
 
