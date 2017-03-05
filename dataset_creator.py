@@ -11,6 +11,7 @@ import faster_rcnn_utils as fast_ut
 import db_record as db_rec
 import db_utils
 from structured import dict2xml
+import gc
 
 class DatasetCreator():
     """
@@ -462,13 +463,16 @@ class DatasetCreator():
 
         # every element is a list of Tracer with PIL Image as subject
         foreg_names = [imp.split('/')[-1] for imp in self.foreground_list]
-        foreg_img_list = [preprocessing.open_image(imp) for imp in self.foreground_list]
+        #foreg_img_list = [preprocessing.open_image(imp) for imp in self.foreground_list]
 
         ##
         # apply transformation for all foreground
         # every transformation return a list of modified foregrounds
-        for idx, im in enumerate(foreg_img_list):
+        idx=-1
+        for imp in self.foreground_list:
 
+            idx+=1
+            im = preprocessing.open_image(imp)
             if len(self.list_transformation_to_call_foreg)>0:
 
                 foreg_transformer = CombinatorialTransformer(
@@ -503,35 +507,39 @@ class DatasetCreator():
                 #
                 # list of background PIL images
                 if random_back or self.curr_back_img_list is None:
-                    self.curr_back_img_list = [preprocessing.open_image(imp) for imp in new_back_list]
-                    self.backgr_names = [imp.split('/')[-1] for imp in self.background_list]
+                    #self.curr_back_img_list = [preprocessing.open_image(imp) for imp in new_back_list]
+                    #self.backgr_names = [imp.split('/')[-1] for imp in self.background_list]
+                    self.curr_back_img_list = new_back_list
 
                 #
                 # pre_merge transformation if exists
                 #
                 # if there was pre_merge transformation merge foreground with those new background
                 # otherwise merge with original background
-                if len_premerge_transformation > 0:
-                    bidx=0
-                    for im in (self.curr_back_img_list):
+                bidx=0
+                for imp in (self.curr_back_img_list):
 
-                        back_transformer = CombinatorialTransformer(
-                            self.list_transformation_to_call_back['pre_merge'],
-                            self.list_transformation_background['pre_merge'],
-                            im
-                        )
-                        back_transformer.apply_transformations()
+                    im = preprocessing.open_image(imp)
+                    backgr_name = imp.split('/')[-1]
 
-                        ##
-                        # for every background create final image
-                        for merged_back in back_transformer.all_items:
-                            self.merge_and_save(merged_back, transformed_foreg, foreg_name,  self.backgr_names[bidx])
-                        bidx+=1
-                else:
-                    bidx=0
-                    for im in (self.curr_back_img_list):
-                        self.merge_and_save(TransformationTracer(im), transformed_foreg, foreg_name, self.backgr_names[bidx])
-                        bidx+=1
+                    if len_premerge_transformation > 0:
+
+                            back_transformer = CombinatorialTransformer(
+                                self.list_transformation_to_call_back['pre_merge'],
+                                self.list_transformation_background['pre_merge'],
+                                im
+                            )
+
+                            back_transformer.apply_transformations()
+
+                            ##
+                            # for every background create final image
+                            for merged_back in back_transformer.all_items:
+                                self.merge_and_save(merged_back, transformed_foreg, foreg_name,  backgr_name)
+                    else:
+                            self.merge_and_save(TransformationTracer(im), transformed_foreg, foreg_name, backgr_name)
+
+                    bidx+=1
 
     @profile
     def merge_and_save(self, back_tracer, foreg_tracer, foreg_name, back_name):
@@ -734,7 +742,9 @@ class DatasetCreator():
 
         img_annotation = self.create_annotation(original_name_noext)
 
-        if img_annotation is None: return
+        if img_annotation is None:
+            gc.collect()
+            return
 
         img_annotation = self.merge_annotation(img_annotation, pil_merged_tracer)
 
@@ -749,6 +759,8 @@ class DatasetCreator():
         self.cat_img_name_in_txt_file(new_img_name)
 
         self.img_counter+=1
+
+        gc.collect()
 
 
 
