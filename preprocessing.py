@@ -434,12 +434,20 @@ class preprocessing():
 
             new_side=sz_back[idx_max]*pix_to_remove_ratio_respect_back
             old_ratio = float(sz_foreg[idx_max]/sz_foreg[idx_min])
-            new_other_side=new_side*old_ratio
+            new_other_side=float(new_side/old_ratio)
             new_sz=[0, 0]
             new_sz[idx_max]=new_side
             new_sz[idx_min]=new_other_side
 
+            if sz_back[idx_min] < new_sz[idx_min]:
+                new_side_other=sz_back[idx_min]*pix_to_remove_ratio_respect_back
+                new_side=new_other_side*old_ratio
+                new_sz = [0, 0]
+                new_sz[idx_max] = new_side
+                new_sz[idx_min] = new_side_other
+
             preprocessing.resize(pil_foreg, new_sz)
+
 
     # @staticmethod
     # def resize_from_other_ratio_to_new(pil_toresize, pil_get_ratio_from, pil_get_ratio_to):
@@ -486,8 +494,7 @@ if __name__ == '__main__':
     TEST_RESIZE=True
 
     fut = fu.fish_utils()
-    ex_background = fut.get_test_selected_background()
-    ex_bbox = fut.get_test_bboxed_selected()
+    ex_background, ex_bbox = fut.get_random_test_bboxed_selected()
 
     pil_backg = preprocessing.open_image(ex_background)
     pil_foreg = preprocessing.open_image(ex_bbox)
@@ -552,7 +559,41 @@ if __name__ == '__main__':
         _new.show()
 
     if TEST_RESIZE or ALL_TRUE:
+        import range_utils
+        def choose_point(back_pil, fore_pil):
+            """
+            get points randomly or from xml annotation file associate with
+            back_pil (PIL Image)
 
-        preprocessing.check_merging_size(pil_foreg, pil_backg)
-        _new, bb = preprocessing.merge_img_in_background(pil_foreg, pil_backg, [(0,0)])
-        _new[0].show()
+            :param back_pil: pil background image
+            :param fore_pil: pil foreground image
+            :return:
+            """
+
+            # TODO - get points from xml annotation file
+            annotated_points = []
+            l_annotated = len(annotated_points)
+            if l_annotated > 0:
+                if l_annotated == 1:
+                    return annotated_points[0]
+                else:
+                    rnd_id = np.random.randint(0, l_annotated, 1)
+                    return annotated_points[rnd_id]
+            else:
+                wb, hb = back_pil.size
+                wf, hf = fore_pil.size
+                center_x = range_utils.choice_n_rnd_numbers_from_to_linspace(0, wb - wf, wb - wf, 1)[0]
+                center_y = range_utils.choice_n_rnd_numbers_from_to_linspace(0, hb - hf, hb - hf, 1)[0]
+                return (center_x, center_y)
+
+        for i in range(1,100):
+            ex_background, ex_bbox = fut.get_random_test_bboxed_selected()
+
+            pil_foreg = preprocessing.open_image(ex_background)
+            pil_backg = preprocessing.open_image(ex_bbox)
+            print "pre size {} {}".format(pil_foreg.size, pil_backg.size)
+            preprocessing.check_merging_size(pil_backg, pil_foreg)
+            print "post size {} {}".format(pil_foreg.size, pil_backg.size)
+            chosen_point = choose_point(pil_backg, pil_foreg)
+            _new, bb = preprocessing.merge_img_in_background(pil_backg,pil_foreg, [chosen_point])
+            #_new[0].show()
