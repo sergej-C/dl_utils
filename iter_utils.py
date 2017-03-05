@@ -67,7 +67,7 @@ class CombinatorialTransformer():
             for idx, el in enumerate(r):
 
 
-                print "transform {} with {} and param {}".format(tracer.obj,self.input_func[idx], el)
+                #print "transform {} with {} and param {}".format(tracer.obj,self.input_func[idx], el)
                 tracer.add_func_param_and_update(self.input_func[idx], el)
 
             self.all_items.append(tracer)
@@ -93,7 +93,7 @@ class TransformationTracer():
         self.obj = obj
 
         if tracer is not None:
-            print tracer.applied_funcs_names
+            #print tracer.applied_funcs_names
             self.applied_funcs = tracer.applied_funcs
             self.applied_funcs_names = tracer.applied_funcs_names
             self.params = tracer.params
