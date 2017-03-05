@@ -105,12 +105,12 @@ class TransformationTracer():
     def add_func(self, f):
         self.applied_funcs.append(f)
         self.applied_funcs_names.append(f.__name__)
-        print "appended f {} funcs {}".format(f.__name__, self.applied_funcs_names)
+        #print "appended f {} funcs {}".format(f.__name__, self.applied_funcs_names)
 
 
     def add_param(self, p):
         self.params.append(p)
-        print "appended p {} param {}".format(p, self.params)
+        #print "appended p {} param {}".format(p, self.params)
 
     def add_func_param(self, f, p):
         self.add_func(f)
