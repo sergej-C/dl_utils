@@ -105,8 +105,9 @@ def extract(classes, n, dataset_name, root_path, new_name, class_field='class', 
 
         if not counters.has_key(class_):
             counters[class_] = 1;
+            add_img_to_ds(im, root_path=root_path, dataset_name=dataset_name, anno_p=ann_p, new_name=new_name, out=out)
         else:
-            if counters[class_] <= n:
+            if counters[class_] < n:
                 add_img_to_ds(im, root_path=root_path, dataset_name=dataset_name, anno_p=ann_p, new_name=new_name, out=out)
                 counters[class_] += 1
             else:
