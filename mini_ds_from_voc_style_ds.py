@@ -37,7 +37,7 @@ def add_img_to_ds(im_name, root_path, dataset_name, new_name, anno_p, out):
         f.write("%s\n" % im_name)
 
 
-def extract(classes, n, dataset_name, root_path, new_name, class_field='class', out='/tmp'):
+def extract(classes, n, dataset_name, root_path, new_name, class_field='class', count_from=1, only_class=None, out='/tmp'):
     """
     voc style data has structure
     root/Annotations/img_[i].xml
@@ -83,6 +83,9 @@ def extract(classes, n, dataset_name, root_path, new_name, class_field='class', 
     counters = {}
     full_classes = {}
 
+    if count_from>1:
+        list_images = list_images[count_from:]
+
     i=0
     for im in list_images:
         ann_p = os.path.join(
@@ -98,6 +101,10 @@ def extract(classes, n, dataset_name, root_path, new_name, class_field='class', 
         objs = fu.parse_obj(tree, len(classes), \
                             class_to_ind, use_diff=False, minus_one=False)
         class_ = objs['gt_classes'][0]
+
+        if only_class is not None:
+            if class_ != only_class:
+                continue
 
         if full_classes.has_key(class_) and len(full_classes)==len(classes):
             print "all done, exit"
