@@ -16,9 +16,10 @@ def choice_n_rnd_numbers_from_to_linspace(start, end, space, n, integer=False, r
     else:
         np.random.seed()
     r1 = np.linspace(start, end, space)
-    keys = np.random.randint(0, len(r1), n)
+    #keys = np.random.randint(0, len(r1), n)
 
-    choices = r1[keys]
+    #choices = r1[keys]
+    choices = np.random.choice(r1, n, replace=False)
     if integer:
         choices = choices.astype(int)
 
