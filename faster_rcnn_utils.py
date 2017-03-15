@@ -20,10 +20,14 @@ plt.rcParams['image.interpolation'] = 'nearest'
 
 import data_utils as du
 #import dlc_utils as dlcu
+KAGGLE_PATH=os.environ.get('KAGGLE_PATH')
+FISH_DATA_PATH=KAGGLE_PATH+'/fish'
+FASTER_RCNN_PATH = os.environ.get('PYFASTER_PATH')
+FASTER_RCNN_TOOLS_PATH = FASTER_RCNN_PATH + 'tools'
+FASTER_RCNN_LIB_PATH = FASTER_RCNN_PATH + 'lib'
 
 class faster_rcnn_utils():
-    KAGGLE_PATH=os.environ.get('KAGGLE_PATH')
-    FISH_DATA_PATH=KAGGLE_PATH+'/fish'
+
         
     # some utils
     #sys.path.append(KAGGLE_PATH+'/dl_utils')
@@ -31,7 +35,17 @@ class faster_rcnn_utils():
 
     def __init__(self):
         print "init faster_rcnn_utils"
-    
+
+    def get_root_folder(self):
+        return FASTER_RCNN_PATH
+
+    def get_data_folder(self, project_name=''):
+        return os.path.join(
+            self.get_root_folder(),
+            'data',
+            project_name
+        )
+
     def create_base_folders(self, path_dataset, dataset_name):
         # create folders structure for use with caffe faster-rcnn
         du.mkdirs(path_dataset)
@@ -320,14 +334,21 @@ class faster_rcnn_utils():
             y1 = float(bbox.find('ymin').text) - minus
             x2 = float(bbox.find('xmax').text) - minus
             y2 = float(bbox.find('ymax').text) - minus
-            cls = class_to_ind[obj.find('name').text.lower().strip()]
+
+            cls_name=obj.find('name').text.lower().strip()
+
+            #if cls_name is None:
+            #    cls_name = class_to_ind[obj.find('class').text.lower().strip()]
+            cls = class_to_ind[cls_name]
+        
+            #print "found class {} cls2ind {}".format(cls_name, cls)
+
             boxes[ix, :] = [x1, y1, x2, y2]
             gt_classes[ix] = cls
             overlaps[ix, cls] = 1.0
             seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
 
         overlaps = scipy.sparse.csr_matrix(overlaps)
-
         return {'boxes' : boxes,
                 'gt_classes': gt_classes,
                 'gt_overlaps' : overlaps,

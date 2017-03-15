@@ -12,3 +12,12 @@ def save_text_in_file(text, file_path):
 def append_txt_to_file(text, file_path):
     with open(file_path, 'a') as f:
         f.write(text+'\n')
+
+def ensure_last_slash(path):
+
+    if len(path)==0:
+        return
+    if path[-1]!='/':
+        return path+'/'
+    else:
+        return path

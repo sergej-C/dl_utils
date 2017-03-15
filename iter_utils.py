@@ -114,6 +114,13 @@ class TransformationTracer():
 
     def add_func_param(self, f, p):
         self.add_func(f)
+
+        # if instance conditional param
+        # check on conditional rules
+        # add param based on result
+        #if isinstance(p, 'ConditionalParam'):
+        #    p.check_conditions(self.obj)
+        #    p=p.conditional_param
         self.add_param(p)
 
     def get_func_param(self):
@@ -154,6 +161,15 @@ class TransformationTracer():
         print "tracer2 func {}".format(tracer2.applied_funcs_names)
         print "new tracer func {}".format(tracer.applied_funcs_names)"""
         return tracer
+
+class ConditionalParam():
+
+    def __init__(self, conditional_func):
+        self.conditional_param=None
+        self.conditional_func=conditional_func
+
+    def check_conditions(self, obj):
+        self.conditional_param = self.conditional_func(obj)
 
 if __name__ == '__main__':
     class test():

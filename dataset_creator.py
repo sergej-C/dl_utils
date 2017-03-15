@@ -26,11 +26,11 @@ class DatasetCreator():
                  name,
                  base_path_background_glob,
                  base_path_foreground_glob,
-                 list_transformation_background,
-                 list_transformation_foreground,
-                 list_transformation_to_call_back,
-                 list_transformation_to_call_foreg,
                  output_folder_path,
+                 list_transformation_background=None,
+                 list_transformation_foreground=None,
+                 list_transformation_to_call_back=None,
+                 list_transformation_to_call_foreg=None,
                  choose_n_random_background=-1,
                  img_name_prefix='',
                  random_background_for_all=False,
@@ -80,12 +80,14 @@ class DatasetCreator():
 
         #
         # where there are the background images, in glob style text i.e. /path/to/*/*.jpg
+        # can be a list of glob style paths
         self.base_path_backgrounds_glob = base_path_background_glob
 
         #
         # where there are the foreground images
         # if class_names are defined, iterate over them and
         # load images from base_path_foreground, in glob style text i.e. /path/to/*/*.png
+        # can be a list of glob style paths
         self.base_path_foreground_glob = base_path_foreground_glob
 
         #
@@ -205,8 +207,8 @@ class DatasetCreator():
         # prepend to img names
         self.img_name_prefix = img_name_prefix
 
-
-    def choose_point(self, back_pil, fore_pil):
+    @staticmethod
+    def choose_point(back_pil, fore_pil):
         """
         get points randomly or from xml annotation file associate with
         back_pil (PIL Image)
@@ -241,8 +243,6 @@ class DatasetCreator():
         if self.choose_n_random_background != -1 and self.random_background_for_all:
             return np.random.choice(self.background_list, self.choose_n_random_background)
 
-    ##
-    # too high ram usage, use create_random_background_for_foreground
     def create(self):
 
         self.get_glob_paths()
@@ -350,7 +350,7 @@ class DatasetCreator():
                     modified_foreg.obj
                 )
 
-                chosen_point = self.choose_point(back_obj, modified_foreg.obj)                
+                chosen_point = DatasetCreator.choose_point(back_obj, modified_foreg.obj)
                 if self.DEBUG:
                     print "chosen point {}".format(chosen_point)
 
@@ -444,16 +444,27 @@ class DatasetCreator():
     def get_glob_paths(self):
         #
         # get the list of foregrounds and backgrounds
-        self.foreground_list = glob(self.base_path_foreground_glob)
+        if isinstance(self.base_path_backgrounds_glob, list):
+            self.background_list = []
+            for p in self.base_path_backgrounds_glob:
+                self.background_list.append(glob(p))
+        else:
+            self.background_list = glob(self.base_path_backgrounds_glob)
 
-        self.background_list = glob(self.base_path_backgrounds_glob)
 
+        if isinstance(self.base_path_foreground_glob, list):
+            self.foreground_list = []
+            for p in self.base_path_foreground_glob:
+                self.foreground_list.append(glob(p))
+        else:
+            self.foreground_list = glob(self.base_path_foreground_glob)
 
         # checks all images can be loaded from PIL (if empty file -> removed)
         imu.check_imgs_list_and_rm_empty(self.foreground_list)
         imu.check_imgs_list_and_rm_empty(self.background_list)
 
         print len(self.foreground_list), len(self.background_list)
+
 
 
     def create_random_background_for_foreground(self):
@@ -581,7 +592,7 @@ class DatasetCreator():
         )
         print "post size {} {}".format(back_tracer.obj.size, foreg_tracer.obj.size)
 
-        chosen_point = self.choose_point(back_tracer.obj, foreg_tracer.obj)
+        chosen_point = DatasetCreator.choose_point(back_tracer.obj, foreg_tracer.obj)
 
         pil_merged, bboxes = (
             preprocessing.merge_img_in_background(
@@ -623,7 +634,8 @@ class DatasetCreator():
 
         print "saved {} images and annotation files".format(self.img_counter)
 
-    def create_annotation(self, original_name_noext):
+    @staticmethod
+    def create_annotation(original_name_noext, db_conf, dbu):
 
         img_annotation = {}
 
@@ -631,9 +643,9 @@ class DatasetCreator():
 
         #
         # get extra annotation from db
-        if self.db_conf is not None:
+        if db_conf is not None:
             # print "search for img {}".format(original_name_noext)
-            rec_img = self.get_bbox_from_db(original_name_noext + '.jpg')
+            rec_img = DatasetCreator.get_bbox_from_db(original_name_noext + '.jpg', db_conf, dbu)
 
             if rec_img is not None:
 
@@ -650,7 +662,8 @@ class DatasetCreator():
 
         return img_annotation
 
-    def merge_annotation(self, img_annotation, extra_annotations):
+    @staticmethod
+    def merge_annotation(img_annotation, extra_annotations):
         #
         # add extra annotations from tracers
 
@@ -662,11 +675,16 @@ class DatasetCreator():
 
         return img_annotation
 
-    def set_bbox_annotation(self, img_annotation, bboxes):
+
+    @staticmethod
+    def set_bbox_annotation(img_annotation, bboxes):
 
         #
         # set new bounding boxes
-        bounding_boxes = bboxes
+        if isinstance(bboxes[0], np.ndarray):
+            bounding_boxes = bboxes[0]
+        else:
+            bounding_boxes = bboxes
 
         img_annotation['object']['bndbox'] = {}
         img_annotation['object']['bndbox']['xmin'] = bounding_boxes[0]
@@ -676,12 +694,13 @@ class DatasetCreator():
 
         return img_annotation
 
-    def set_voc_style_annotation(self, img_annotation, im, new_img_name, back_orig_name_prefix):
+    @staticmethod
+    def set_voc_style_annotation(name, img_annotation, im, new_img_name, back_orig_name_prefix):
 
         # voc style adjust
         img_annotation['filename'] = new_img_name + '.jpg'
         img_annotation['orig_background'] = back_orig_name_prefix
-        img_annotation['folder'] = self.name
+        img_annotation['folder'] = name
 
         #
         # TODO - annotate
@@ -695,7 +714,8 @@ class DatasetCreator():
 
         return img_annotation
 
-    def set_depth_in_annotation(self,img_annotation, path_save):
+    @staticmethod
+    def set_depth_in_annotation(img_annotation, path_save):
 
         #
         # reload image to know bits [only jpeg]
@@ -707,23 +727,25 @@ class DatasetCreator():
 
         return img_annotation
 
-    def create_folders_and_write_img(self, new_img_name, im):
+    @staticmethod
+    def create_folders_and_write_img(new_img_name, im, fast_ut, output_folder_path, name, debug=False):
 
         #
         # create faster_rcnn voc style folders
-        self.fast_ut.create_base_folders(self.output_folder_path, self.name)
+        fast_ut.create_base_folders(output_folder_path, name)
 
         #
         # save images
-        path_save = os.path.join(self.output_folder_path, self.name, 'JPEGImages',
+        path_save = os.path.join(output_folder_path, name, 'JPEGImages',
                                  new_img_name + '.jpg')
 
-        if self.DEBUG:
+        if debug:
             print "saving {}".format(path_save)
 
         preprocessing.write_pil_im(im, path_save)
 
-    def create_xml_and_save(self, img_annotation, new_img_name):
+    @staticmethod
+    def create_xml_and_save(img_annotation, new_img_name, output_folder_path, name, debug=False):
 
 
         #
@@ -731,10 +753,10 @@ class DatasetCreator():
         _xml = dict2xml(img_annotation, roottag='annotation')
         # print _xml
 
-        xml_path = os.path.join(self.output_folder_path,
-                               self.name, 'Annotations',
+        xml_path = os.path.join(output_folder_path,
+                               name, 'Annotations',
                                new_img_name + '.xml')
-        if self.DEBUG:
+        if debug:
             print "saving {}".format(xml_path)
 
         #
@@ -742,16 +764,18 @@ class DatasetCreator():
         save_text_in_file(_xml,
                   xml_path)
 
-    def cat_img_name_in_txt_file(self, new_img_name):
+    @staticmethod
+    def cat_img_name_in_txt_file(new_img_name, output_folder_path, name, debug=False):
 
-        if self.DEBUG:
+        if debug:
             print "call to cat in txt for {}".format(new_img_name)
         #
         # append in image list file
         append_txt_to_file(new_img_name,
-                   os.path.join(self.output_folder_path,
-                                self.name, 'ImageSets', 'Main',
-                                self.name + '.txt'))
+                   os.path.join(output_folder_path,
+                                name, 'ImageSets', 'Main',
+                                name + '.txt'))
+
 
     def save_final_image(self, pil_merged_tracer, bboxes, foreg_name, back_name):
 
@@ -770,23 +794,23 @@ class DatasetCreator():
         # new image name
         new_img_name = self.img_name_prefix + '_'+ original_name_noext + '_mod_' + str(self.img_counter)
 
-        img_annotation = self.create_annotation(original_name_noext)
+        img_annotation = DatasetCreator.create_annotation(original_name_noext, self.db_conf, self.dbu)
 
         if img_annotation is None:
             gc.collect()
             return
 
-        img_annotation = self.merge_annotation(img_annotation, pil_merged_tracer)
+        img_annotation = DatasetCreator.merge_annotation(img_annotation, pil_merged_tracer)
 
-        img_annotation = self.set_bbox_annotation(img_annotation, bboxes)
+        img_annotation = DatasetCreator.set_bbox_annotation(img_annotation, bboxes)
 
-        img_annotation = self.set_voc_style_annotation(img_annotation, im, new_img_name, back_orig_name_prefix)
+        img_annotation = DatasetCreator.set_voc_style_annotation(self.name, img_annotation, im, new_img_name, back_orig_name_prefix)
 
-        self.create_folders_and_write_img(new_img_name, im)
+        DatasetCreator.create_folders_and_write_img(new_img_name, im, self.output_folder_path, self.name)
 
-        self.create_xml_and_save(img_annotation, new_img_name)
+        DatasetCreator.create_xml_and_save(img_annotation, new_img_name, self.output_folder_path, self.name, self.DEBUG)
 
-        self.cat_img_name_in_txt_file(new_img_name.strip())
+        DatasetCreator.cat_img_name_in_txt_file(new_img_name.strip(), self.output_folder_path, self.name, self.DEBUG)
 
         self.img_counter+=1
 
@@ -836,8 +860,11 @@ class DatasetCreator():
             #
             # get extra annotation from db
             if self.db_conf is not None:
+
+                self.ensure_db_conn()
+
                 #print "search for img {}".format(original_name_noext)
-                rec_img = self.get_bbox_from_db(original_name_noext+'.jpg')
+                rec_img = DatasetCreator.get_bbox_from_db(original_name_noext+'.jpg', self.db_conf, self.dbu)
 
                 if rec_img is not None:
 
@@ -933,16 +960,14 @@ class DatasetCreator():
             plt.show()
 
 
+    @staticmethod
+    def get_bbox_from_db(bbox_name, db_conf, dbu):
 
-    def get_bbox_from_db(self, bbox_name):
-
-        self.ensure_db_conn()
-
-        table_name = self.db_conf['table_name']
+        table_name = db_conf['table_name']
 
         sql = "SELECT * FROM  `{}` WHERE  `bs_img_name` =  '{}' LIMIT 0 , 30".format(table_name, bbox_name)
-        bb = self.dbu.exec_sql(sql)
-        self.dbu.close_connection()
+        bb = dbu.exec_sql(sql)
+        dbu.close_connection()
 
         if len(bb) > 0:
             return  db_rec.db_record(bb[0])
@@ -985,6 +1010,8 @@ if __name__ == '__main__':
         }
     }
 
+    ##
+    # too high ram usage if apply green mask function is included
     func_back_params = {
         'pre_merge' : {
             'contrast': {
