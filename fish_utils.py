@@ -258,7 +258,7 @@ class fish_utils():
         classes = self.classes_for_faster[1:]
 
         if db_conf is not None:
-            self.db_conf=db_conff
+            self.db_conf=db_conf
         
         for c in classes:
 
