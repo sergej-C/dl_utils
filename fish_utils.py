@@ -252,7 +252,7 @@ class fish_utils():
             if rec_img is not None:
                 return rec_img.bs_color_mask == 'green'
 
-    def create_n_random_images(self, N, img_name_prefix, name, output_folder_path='/tmp', debug=False):
+    def create_n_random_images(self, N, img_name_prefix, name, p_glob_list_b=None, p_glob_list_f=None, output_folder_path='/tmp', debug=False):
         """
         return N images merging
 
@@ -266,10 +266,25 @@ class fish_utils():
             cls = c.upper()
 
             fast_ut = faster_rcnn_utils()
-            p_back = self.get_all_selected_background_path_gob(type='')
-            p_foreg = self.get_bboxed_selected_modified_and_variants_path_for_class_glob(cls, type='')
+            if p_glob_list_b is None:
+                p_back = self.get_all_selected_background_path_gob(type='')
+            else:
+                p_back = p_glob_list_b
+
+            if p_glob_list_f is None:
+                p_foreg = self.get_bboxed_selected_modified_and_variants_path_for_class_glob(cls, type='')
+            else:
+                p_foreg = p_glob_list_f
 
             foreground_list, background_list = self.get_glob_paths(p_back, p_foreg)
+            if len(foreground_list)==0:
+                print "path to foregrounds not found"
+                return
+
+            if len(background_list)==0:
+                print "path to backgorunds not found"
+                return
+
             imf_list, imb_list = self.get_n_random_item_from_list(foreground_list, background_list, N)
 
             # open images
