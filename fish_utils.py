@@ -269,12 +269,12 @@ class fish_utils():
             if p_glob_list_b is None:
                 p_back = self.get_all_selected_background_path_gob(type='')
             else:
-                p_back = p_glob_list_b
+                p_back = p_glob_list_b()
 
             if p_glob_list_f is None:
                 p_foreg = self.get_bboxed_selected_modified_and_variants_path_for_class_glob(cls, type='')
             else:
-                p_foreg = p_glob_list_f
+                p_foreg = p_glob_list_f(cls)
 
             foreground_list, background_list = self.get_glob_paths(p_back, p_foreg)
             if len(foreground_list)==0:
