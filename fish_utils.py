@@ -248,7 +248,7 @@ class fish_utils():
             if rec_img is not None:
                 return rec_img.bs_color_mask == 'green'
 
-    def create_n_random_images(self, N, img_name_prefix, name, output_folder_path='/tmp', debug=False):
+    def create_n_random_images(self, N, img_name_prefix, name, db_conf=None, output_folder_path='/tmp', debug=False):
         """
         return N images merging
 
@@ -257,6 +257,9 @@ class fish_utils():
         """
         classes = self.classes_for_faster[1:]
 
+        if db_conf is not None:
+            self.db_conf=db_conff
+        
         for c in classes:
 
             cls = c.upper()
