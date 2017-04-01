@@ -628,7 +628,81 @@ class fish_utils():
                     #
                     # save image list
 
-    #def create_vocstyle_nrandom_forclss_with_bboxed_and_masks(self):
+    def create_vocstyle_nrandom_forclss_with_bboxed_and_masks(self, prepath_selection, ds_name, N, szw, szh, out_path='/tmp/', img_prefix='synth_valid_sc_rot_ligh_cont'):
+
+
+
+        def paths_b():
+            return [prepath_selection + 'background_selection/*.jpg']
+
+        def paths_f(cls):
+            return [
+                prepath_selection + 'bboxed_selection/{}/modified/*.png'.format(cls),
+                prepath_selection + 'bboxed_selection/{}/modified/variants/*.png'.format(cls)
+            ]
+
+        db_conf = {
+            'host': 'localhost',
+            'user': 'root',
+            'password': 'MmMmMm2',
+            'db': 'fish',
+            'table_name': 'bbox_selection'
+        }
+
+        fu = fish_utils(db_conf)
+
+        fut.create_n_random_croppedimages_with_masks(N, img_prefix, ds_name, paths_b, paths_f, debug=True,
+                                                             output_folder_path=out_path)
+
+        du.mkdirs(out_path + ds_name + '/resized_masks/')
+        du.mkdirs(out_path + ds_name + '/resized_bboxed/')
+        ratios = resizecontain_and_rotate_taller(out_path + ds_name + '/resized_masks/',
+                                                 glob(out_path + ds_name + '/masks/*/*.jpg'), szh, szw, pad_mode='black',
+                                                 taller_ratio=1. / 4.)
+        ratios = resizecontain_and_rotate_taller(out_path + ds_name + '/resized_bboxed/',
+                                                 glob(out_path + ds_name + '/bboxed/*/*.jpg'), szh, szw, pad_mode='mean',
+                                                 taller_ratio=1. / 4.)
+
+    def load_with_mask_resised(self, prepath, szw, szh, cls2ind=None):
+
+
+        if cls2ind == None:
+            cls2ind = du.array_to_ind(self.classes_for_faster[1:])
+
+        img_list = glob(prepath + '/resized_bboxed/*/*.jpg')
+        mask_list = glob(prepath + '/resized_masks/*/*.jpg')
+
+        assert (len(img_list) == len(mask_list), 'same size...')
+        N = len(img_list)
+        bboxed = np.empty([N, szw, szh, 3])
+        masks = np.empty([N, szw, szh])
+        names = []
+        y = np.empty([N, ])
+
+        for i, imp in enumerate(img_list):
+            cls = imp.split('/')[-2]
+            img_name = imp.split('/')[-1]
+
+            im = io.imread(imp)
+
+            mask_p = prepath + '/resized_masks/{}/{}'.format(cls, img_name)
+            mask = io.imread(mask_p)
+            mask[np.where(mask < 200)] = 0
+            mask[np.where(mask >= 200)] = 255
+            gray_mask = mask[:, :, 0]
+            # print mask_p
+            # print imp
+
+            # io.imshow(im[:,:,0]*gray_mask)
+            # break
+            # print bboxed[i].shape
+            bboxed[i, ...] = im
+            masks[i, ...] = gray_mask
+            names.append(img_name)
+            y[i] = cls2ind[cls.lower()]
+
+        return N, bboxed, masks, names, y
+
 
 
 if __name__ == '__main__':
