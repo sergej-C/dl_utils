@@ -15,6 +15,9 @@ from data_struct_utils import *
 from glob import glob
 from extract_predictions import *
 
+from skimage import measure
+from skimage import io, exposure, img_as_uint, img_as_float
+
 class fish_utils():
     
 
@@ -260,7 +263,7 @@ class fish_utils():
         :return:
         """
         classes = self.classes_for_faster[1:]
-       
+
         for c in classes:
 
             cls = c.upper()
@@ -416,6 +419,216 @@ class fish_utils():
 
             #
             # save image list
+
+
+    def create_n_random_croppedimages_with_masks(self, N, img_name_prefix, name, p_glob_list_b=None, p_glob_list_f=None,
+                               output_folder_path='/tmp', debug=False):
+        """
+        return N images merging
+
+
+        :return:
+        """
+        classes = self.classes_for_faster[1:]
+
+        for c in classes:
+
+            cls = c.upper()
+
+            fast_ut = faster_rcnn_utils()
+            if p_glob_list_b is None:
+                p_back = self.get_all_selected_background_path_gob(type='')
+            else:
+                p_back = p_glob_list_b()
+
+            if p_glob_list_f is None:
+                p_foreg = self.get_bboxed_selected_modified_and_variants_path_for_class_glob(cls, type='')
+            else:
+                p_foreg = p_glob_list_f(cls)
+
+            foreground_list, background_list = self.get_glob_paths(p_back, p_foreg)
+            if len(foreground_list) == 0:
+                print "path to foregrounds not found"
+                return
+
+            if len(background_list) == 0:
+                print "path to backgorunds not found"
+                return
+
+            imf_list, imb_list = self.get_n_random_item_from_list(foreground_list, background_list, N)
+
+            # open images
+            for imd, foreg_imp in enumerate(imf_list):
+                back_imp = imb_list[imd]
+
+                is_variant = False
+                # if variants name for search in db is different
+                if self.is_variants(foreg_imp):
+                    is_variant = True
+
+                f_name = foreg_imp.split('/')[-1]
+                b_name = back_imp.split('/')[-1]
+
+                print "f_name {}, b_name {}".format(f_name, b_name)
+                pil_f = preprocessing.open_image(foreg_imp)
+                pil_b = preprocessing.open_image(back_imp)
+
+                #
+                # original foreground image name
+                original_name = f_name
+                if is_variant:
+                    original_name_noext = original_name[:-4][:-2]
+                else:
+                    original_name_noext = original_name[:-4]
+                #
+                # original background image name
+                back_orig_name_prefix = b_name
+
+                #
+                # if exists selected foreground from this background,
+                # its name is name of background without ext plus _1 or 2 (1 at least) + ext
+                back_name_for_search = back_orig_name_prefix[:-4] + '_1'
+
+                back_is_green = False
+                fore_is_green = False
+
+                #
+                # fish is green - check in db
+                back_is_green = self.is_green(back_name_for_search)
+                if back_is_green is None:
+                    back_is_green = False
+                fore_is_green = self.is_green(original_name_noext)
+
+                print back_name_for_search, back_is_green, original_name_noext, fore_is_green
+
+                #
+                # new image name
+                new_img_name = img_name_prefix + '_' + original_name_noext + '_mod_' + str(imd)
+
+                tracer = TransformationTracer(pil_f)
+
+                #
+                # preprocessing foreg
+
+                # random scale but based on size of image - TODO
+                scale_r = range_utils.choice_n_rnd_numbers_from_to_linspace(.95, 1.2, 10, 1)[0]
+                pil_f = preprocessing.rescale_img_by_ratio(pil_f, scale_r)
+                tracer.add_func_param(preprocessing.rescale_img_by_ratio, scale_r)
+
+                # random rotation
+                rot_r = range_utils.choice_n_rnd_numbers_from_to_linspace(0, 180, 30, 1, integer=True)[0]
+                pil_f = preprocessing.rotate_img_by_angle(pil_f, rot_r)
+                tracer.add_func_param(preprocessing.rotate_img_by_angle, rot_r)
+
+                # random shear
+                shears = (-.3, -.25, -.2, 0, .2, .25, .3, .35)
+                shear_r = float(np.random.choice(shears))
+                pil_f = preprocessing.random_shear(pil_f, shear_r, row_axis=0, col_axis=1, channel_axis=2,
+                             fill_mode='nearest', cval=0.)
+
+                # if is green background and foreground isnt, mask green foreg
+                if back_is_green and not fore_is_green:
+                    pil_f = preprocessing.apply_green_mask_pil_img(pil_f, False)
+                    tracer.add_func_param(preprocessing.apply_green_mask_pil_img, 'on_foreg')
+
+                # if is green foreground and backgorund isnt, mask green back
+                if not back_is_green and fore_is_green:
+                    pil_b = preprocessing.apply_green_mask_pil_img(pil_b, False)
+                    tracer.add_func_param(preprocessing.apply_green_mask_pil_img, 'on_background')
+
+                ##
+                # before merging create mask
+                img = preprocessing.pil_image_to_array(pil_f)
+                thresh_img = np.where(img[:, :, 3] > 10, 1.0, 0.0)
+
+                eroded = morphology.erosion(thresh_img, np.ones([6, 6]))
+                dilation = morphology.dilation(eroded, np.ones([2, 2]))
+                labels = measure.label(dilation)
+                labels[np.where(labels > 0)] = 255
+
+                #
+                # merging
+                preprocessing.check_merging_size(
+                    pil_b,
+                    pil_f
+                )
+
+                chosen_point = DatasetCreator.choose_point(pil_b, pil_f)
+
+                pil_merged, bboxes = (
+                    preprocessing.merge_img_in_background(
+
+                        pil_b,
+                        pil_f,
+                        [chosen_point],
+                        False
+                    )
+                )
+
+                pil_merged = im = pil_merged[0]
+                #
+                # preprocessing merged
+                light_r = range_utils.choice_n_rnd_numbers_from_to_linspace(.85, 1.15, 20, 1, round=True)[0]
+                pil_merged = preprocessing.change_light(pil_merged, light_r)
+                tracer.add_func_param(preprocessing.change_light, light_r)
+
+                contrast_r = range_utils.choice_n_rnd_numbers_from_to_linspace(.85, 1.15, 20, 1, round=True)[0]
+                pil_merged = preprocessing.change_contrast(pil_merged, contrast_r)
+                tracer.add_func_param(preprocessing.change_contrast, contrast_r)
+
+                ##
+                # after merge create bboxed
+                (xmin, ymin, xmax, ymax) = preprocessing.min_max_from_centers(chosen_point, pil_f, pil_b)
+
+                #
+                # im shape (h, w, ch)
+                #
+                im2crop = preprocessing.pil_image_to_array(pil_merged)
+                cropped = im2crop[ymin:ymax, xmin:xmax, :]
+
+
+                #
+                # save anno, images
+                self.ensure_db_conn()
+
+                img_annotation = DatasetCreator.create_annotation(original_name_noext, self.db_conf, self.dbu)
+
+                if img_annotation is not None:
+                    img_annotation = DatasetCreator.merge_annotation(img_annotation, tracer)
+
+                    img_annotation = DatasetCreator.set_bbox_annotation(img_annotation, bboxes)
+
+                    img_annotation = DatasetCreator.set_voc_style_annotation(name, img_annotation, im, new_img_name,
+                                                                             back_orig_name_prefix)
+
+                    DatasetCreator.create_folders_and_write_img(new_img_name, im, fast_ut, output_folder_path, name,
+                                                                debug)
+
+                    DatasetCreator.create_xml_and_save(img_annotation, new_img_name, output_folder_path, name, debug)
+
+                    DatasetCreator.cat_img_name_in_txt_file(new_img_name.strip(), output_folder_path, name,
+                                                            debug)
+
+                    du.mkdirs(os.path.join(output_folder_path, name, 'masks', cls))
+                    path_save = os.path.join(output_folder_path, name, 'masks', cls,
+                                             new_img_name + '.jpg')
+
+                    #io.use_plugin('freeimage')
+                    #final_mask = exposure.rescale_intensity(labels, out_range='float')
+                    #final_mask = img_as_uint(final_mask)
+                    skimage.io.imsave(path_save , labels)
+
+                    du.mkdirs(os.path.join(output_folder_path, name, 'bboxed', cls))
+                    path_save = os.path.join(output_folder_path, name, 'bboxed', cls,
+                                             new_img_name + '.jpg')
+                    skimage.io.imsave(path_save , cropped)
+                else:
+                    print   "warning, annotation for im {} not created".format(foreg_imp)
+
+                    #
+                    # save image list
+
+    #def create_vocstyle_nrandom_forclss_with_bboxed_and_masks(self):
 
 
 if __name__ == '__main__':

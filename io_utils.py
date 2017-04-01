@@ -1,3 +1,5 @@
+import cPickle
+
 def save_list_to_txt(list_dest, list):
     # save list of images
     thefile = open(list_dest, 'a')
@@ -21,3 +23,12 @@ def ensure_last_slash(path):
         return path+'/'
     else:
         return path
+
+def dump(v, name):
+    with open(name, 'w') as f:
+        cPickle.dump(v, f)
+
+def read(name):
+    with open(name, 'r') as f:
+        return cPickle.load(f)
+

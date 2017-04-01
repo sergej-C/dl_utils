@@ -6,8 +6,17 @@ import PIL.ImageFilter as ImageFilter
 from PIL import ImageEnhance
 import matplotlib.pyplot as plt
 from skimage import img_as_ubyte
-
+from glob import glob
 import cv2
+
+from skimage import morphology
+from skimage import measure
+from sklearn.cluster import KMeans
+from skimage.transform import resize
+from resizeimage import resizeimage
+import data_utils as du
+from sklearn.preprocessing import OneHotEncoder, LabelBinarizer
+import scipy.ndimage as ndi
 
 class preprocessing():
     """
@@ -77,6 +86,24 @@ class preprocessing():
         ymax = cent_y + h
 
         return xmin, ymin, xmax, ymax, pil_backg_cpy
+
+    @staticmethod
+    def min_max_from_centers(points, f_im, b_im):
+
+        wb, hb = b_im.size
+        w, h = f_im.size
+
+        # ensure limits
+        cent_x = max(0, int(points[0] - w / 2.))
+        cent_y = max(0, int(points[1] - h / 2.))
+        cent_x = min(cent_x, int(wb - w))
+        cent_y = min(cent_y, int(hb - h))
+
+        xmin = cent_x
+        ymin = cent_y
+        xmax = cent_x + w
+        ymax = cent_y + h
+        return (xmin, ymin, xmax, ymax)
 
     @staticmethod
     def merge_img_in_background(pil_backg, pil_foreg, points, blur=True):
@@ -476,6 +503,340 @@ class preprocessing():
     def resize(pil_img, new_sz):
         pil_img.thumbnail(new_sz, PIL.Image.ANTIALIAS)
 
+    @staticmethod
+    def resize_contain_image_in_glob(glob_path, new_size, outp, use_class_name=True):
+        """
+
+        if use_class_name use folder name as class name
+        """
+
+        imgs_set = glob(glob_path)
+        szw=new_size[0]
+        szh=new_size[1]
+
+        hist_equal_ = False
+
+        for i,img in enumerate(imgs_set):
+            
+            img_name = img.split('/')[-1]
+            if use_class_name:
+                cls_name = img.split('/')[-2]
+                du.mkdirs(outp+cls_name)
+            else:
+                cls_name = ''
+
+            #print cls_name.upper()
+            
+            im = cv2.imread(img)
+            #print im.shape
+            if im.shape[2]==4:
+                cvc = cv2.COLOR_BGRA2RGB
+            else:
+                cvc = cv2.COLOR_BGR2RGB
+            im = cv2.cvtColor(im, cvc)
+            h, w = im.shape[0], im.shape[1]   
+            
+            dst='{}/{}/{}'.format(outp, cls_name, img_name)
+            
+            
+            if h <= w:
+                #print '---ok'
+                #print "ok, continue h{} < w{}, cp {} to {}".format(h,w,img, outp+img_name)   
+                pim = PIL.Image.open(img)
+                pim = resizeimage.resize_contain(pim,[szw, szh])
+               
+                im = preprocessing.pil_image_to_array(pim)
+                
+                if hist_equal_:
+                    im = hist_equalize(im)
+                    
+                cv2.imwrite(dst, im)
+                continue
+            else:
+                #print '---transpose'                
+                im = im.transpose((1,0,2))                
+                pim = PIL.Image.fromarray(np.uint8(im))
+                pim = resizeimage.resize_contain(pim,[szw, szh])
+                
+                im = preprocessing.pil_image_to_array(pim)
+                
+                if hist_equal_:
+                    im = hist_equalize(im)
+                cv2.imwrite(dst, im)
+
+
+
+    #from keras preprocessing
+    @staticmethod
+    def random_shear(pil_im, intensity, row_axis=1, col_axis=2, channel_axis=0,
+                     fill_mode='nearest', cval=0.):
+        """Performs a random spatial shear of a Numpy image tensor.
+
+         # Arguments
+             x: Input tensor. Must be 3D.
+             intensity: Transformation intensity.
+             row_axis: Index of axis for rows in the input tensor.
+             col_axis: Index of axis for columns in the input tensor.
+             channel_axis: Index of axis for channels in the input tensor.
+             fill_mode: Points outside the boundaries of the input
+                 are filled according to the given mode
+                 (one of `{'constant', 'nearest', 'reflect', 'wrap'}`).
+             cval: Value used for points outside the boundaries
+                 of the input if `mode='constant'`.
+
+         # Returns
+             Sheared Numpy image tensor.
+         """
+
+        x = preprocessing.pil_image_to_array(pil_im)
+        shear = intensity
+        shear_matrix = np.array([[1, -np.sin(shear), 0],
+                                 [0, np.cos(shear), 0],
+                                 [0, 0, 1]])
+
+        h, w = x.shape[row_axis], x.shape[col_axis]
+
+        transform_matrix = transform_matrix_offset_center(shear_matrix, h, w)
+        x = apply_transform(x, transform_matrix, channel_axis, fill_mode, cval)
+        return PIL.Image.fromarray(x)
+
+#from keras preprocessing
+def transform_matrix_offset_center(matrix, x, y):
+    o_x = float(x) / 2 + 0.5
+    o_y = float(y) / 2 + 0.5
+    offset_matrix = np.array([[1, 0, o_x], [0, 1, o_y], [0, 0, 1]])
+    reset_matrix = np.array([[1, 0, -o_x], [0, 1, -o_y], [0, 0, 1]])
+    transform_matrix = np.dot(np.dot(offset_matrix, matrix), reset_matrix)
+    return transform_matrix
+
+#from keras preprocessing
+def apply_transform(x, transform_matrix, channel_axis=0, fill_mode='nearest', cval=0.):
+    x = np.rollaxis(x, channel_axis, 0)
+    final_affine_matrix = transform_matrix[:2, :2]
+    final_offset = transform_matrix[:2, 2]
+    channel_images = [ndi.interpolation.affine_transform(x_channel, final_affine_matrix,
+                                                         final_offset, order=0, mode=fill_mode, cval=cval) for x_channel in x]
+    x = np.stack(channel_images, axis=0)
+    x = np.rollaxis(x, 0, channel_axis + 1)
+    return x
+
+
+import skimage
+from PIL import Image
+import math
+
+def resize_and_rotate_taller(outp, glob_imgs, szh, szw, taller_ratio=1./4.):
+
+    ratios = []
+    for i,img in enumerate(glob_imgs):
+     
+        img_name = img.split('/')[-1]
+        cls_name = img.split('/')[-2]
+        #name_cropped = img_name.split('.')[0]+'_1.jpg'
+        name_cropped = img_name
+        # if num 2 (there are only one pts for images)
+        # choose the nearer to the bbox
+        num = img_name.split('_')[-1].split('.')[0]
+        #if num=='2':
+         
+        #name_orig = '_'.join(name_cropped.split('_')[:2])+'.jpg'
+        #im_p = prepath_cropped+'/'+cls_name+'/'+name_cropped
+        du.mkdirs(outp+cls_name)
+        #print cls_name.upper()
+
+        im = skimage.io.imread(img)
+        #im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        h, w = im.shape[0], im.shape[1]
+        ratios.append(float(h)/w) 
+        dst='{}/{}/{}'.format(outp, cls_name, img_name)
+        #fig, axs = plt.subplots(1,2)    
+        #axs[0].imshow(im)
+        if h > w and (h-w)>(w*taller_ratio):
+            im = rotate(im, angle=90)
+
+        im = resize(im, (szw, szh))
+        skimage.io.imsave(dst, im)
+    return ratios
+
+def padd_from_edge(im, pos_w, pos_h, neww, newh):
+    for i in range(im.shape[2]):
+        if pos_w > 1:
+            v_edge = im[:,pos_w,i]    
+            region_shape = im[:,:pos_w,i].shape
+            region_pre = np.array([v_edge,]*(region_shape[1])).transpose()
+            im[:,:pos_w,i] = region_pre
+
+            v_edge = im[:,(pos_w+neww-1),i]    
+            region_shape = im[:,(pos_w+neww):,i].shape
+            region_post = np.array([v_edge,]*(region_shape[1])).transpose()
+            im[:,(pos_w+neww):,i] = region_post
+
+
+        if pos_h > 1:
+            h_edge = im[pos_h,:,i]    
+            region_shape = im[:pos_h,:,i].shape
+            region_pre = np.array([h_edge,]*(region_shape[0]))
+            im[:pos_h,:,i] = region_pre
+
+            h_edge = im[pos_h+newh-1,:,i]            
+            region_shape = im[pos_h+newh:,:,i].shape
+            print region_shape
+            #rounding not always the same 
+            region_post = np.array([h_edge,]*(region_shape[0]))
+            im[pos_h+newh:,:,i] = region_post
+    return im
+
+
+
+def resizecontain_and_rotate_taller(outp, glob_imgs, szh, szw, pad_mode="black", taller_ratio=1./4.):
+
+    ratios = []
+    for i,img in enumerate(glob_imgs):
+     
+        img_name = img.split('/')[-1]
+        cls_name = img.split('/')[-2]
+        #name_cropped = img_name.split('.')[0]+'_1.jpg'
+        name_cropped = img_name
+        # if num 2 (there are only one pts for images)
+        # choose the nearer to the bbox
+        num = img_name.split('_')[-1].split('.')[0]
+        #if num=='2':
+         
+        #name_orig = '_'.join(name_cropped.split('_')[:2])+'.jpg'
+        #im_p = prepath_cropped+'/'+cls_name+'/'+name_cropped
+        du.mkdirs(outp+cls_name)
+        #print cls_name.upper()
+
+        im = skimage.io.imread(img)
+        #im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        h, w = im.shape[0], im.shape[1]
+        ratios.append(float(h)/w) 
+        dst='{}/{}/{}'.format(outp, cls_name, img_name)
+        #fig, axs = plt.subplots(1,2)    
+        #axs[0].imshow(im)
+        pim = PIL.Image.open(img)
+        #print "h{} w{} imgname{}".format(h,w,img_name)
+        if pad_mode=='mean':
+            m_color = np.hstack((np.mean(im.astype(np.uint8),  axis=(0, 1)), 255))
+            pad_color = totuple(m_color.astype(np.uint8))
+        elif pad_mode == 'black':
+            pad_color=(0, 0, 0, 0)
+        elif pad_mode == 'white':
+            pad_color = (255, 255, 255, 0)
+
+        pim,(pos_w, pos_h, neww, newh) = loc_resize_contain(pim, (szw, szh), pad_color=pad_color)
+
+        if h > w and (h-w)>(w*(taller_ratio)):
+            pim = pim.rotate(angle=90)
+
+        im = preprocessing.pil_image_to_array(pim)
+        im = cv2.cvtColor(im, cv2.COLOR_RGBA2RGB)
+        if pad_mode=="edge":
+            im =  padd_from_edge(im, pos_w, pos_h, neww, newh)
+        skimage.io.imsave(dst, im)
+    return ratios
+
+def padd_from_edge(im, pos_w, pos_h, neww, newh):
+    for i in range(im.shape[2]):
+        if pos_w > 1:
+            v_edge = im[:,pos_w,i]    
+            region_shape = im[:,:pos_w,i].shape
+            region_pre = np.array([v_edge,]*(region_shape[1])).transpose()
+            im[:,:pos_w,i] = region_pre
+
+            v_edge = im[:,(pos_w+neww-1),i]    
+            region_shape = im[:,(pos_w+neww):,i].shape
+            region_post = np.array([v_edge,]*(region_shape[1])).transpose()
+            im[:,(pos_w+neww):,i] = region_post
+
+
+        if pos_h > 1:
+            h_edge = im[pos_h,:,i]    
+            region_shape = im[:pos_h,:,i].shape
+            region_pre = np.array([h_edge,]*(region_shape[0]))
+            im[:pos_h,:,i] = region_pre
+
+            h_edge = im[pos_h+newh-1,:,i]            
+            region_shape = im[pos_h+newh:,:,i].shape
+            print region_shape
+            #rounding not always the same 
+            region_post = np.array([h_edge,]*(region_shape[0]))
+            im[pos_h+newh:,:,i] = region_post
+    return im
+
+def resize_pts(pts, ow, oh, nw, nh, pos_w, pos_h):
+    """
+    calculate coo of points in a resized img
+    in pts pair of coo (x,y)
+    """
+    new_pts = []
+    for p in pts:
+        ox = p[0]
+        oy = p[1]
+        newx = (ox/float(ow)*nw) + pos_w
+        newy = (oy/float(oh)*nh) + pos_h
+        new_pts.append((newx, newy))
+
+    return new_pts
+
+
+def loc_resize_contain(image, size, pad_color=(255, 255, 255, 0)):
+    """
+    Resize image according to size.
+    image:      a Pillow image instance
+    size:       a list of two integers [width, height]
+    """
+    img_format = image.format
+    img = image.copy()
+    img.thumbnail((size[0], size[1]), Image.LANCZOS)
+    
+    neww, newh = img.size
+    background = Image.new('RGBA', (size[0], size[1]), pad_color)
+    diff_w = (size[0] - img.size[0])
+    diff_h = (size[1] - img.size[1])
+    pos_h = int(math.ceil( diff_h / 2))
+    pos_w = int(math.ceil( diff_w / 2))
+    img_position = (
+        pos_w,pos_h        
+    )
+    background.paste(img, img_position)
+    background.format = img_format
+    
+    return background, (pos_w, pos_h, neww, newh)
+
+
+def totuple(a):
+    try:
+        return tuple(totuple(i) for i in a)
+    except TypeError:
+        return a
+
+def one_hot_encode(y):
+     lb = LabelBinarizer()
+     lb.fit(y.squeeze())
+     y = lb.transform(y)
+     return y
+
+def prepare_data_from_folder_classes(imgs_glob_path, clsses, gt=True):
+    imgs = glob(imgs_glob_path+'/*/*.jpg')
+    cls2ind = du.array_to_ind(clsses)
+    y_train = []
+    X_train = []
+    img_k = []
+    for img in imgs:
+        if gt:
+            # presume folder name of images as gt class
+            cls = img.split('/')[-2].lower()
+            y_train.append(cls2ind[cls])
+
+        img_k.append(img.split('/')[-1])
+
+        im = skimage.io.imread(img)
+        #im2 = resize(im_, (sz, sz), mode='reflect')
+        X_train.append(im)
+
+    
+    return np.array(X_train), np.array(y_train), img_k
 
 if __name__ == '__main__':
 
